@@ -50,7 +50,7 @@ export function meteogramModel(hours, { system, timeZone, locale, pxPerHour }) {
 
   const nights = [];
   hours.forEach((hour, i) => {
-    if (hour.isDay) return;
+    if (hour.isDay !== false) return;
     const previous = nights.at(-1);
     if (previous && previous.end === i) {
       previous.end = i + 1;
@@ -115,8 +115,9 @@ export function meteogramModel(hours, { system, timeZone, locale, pxPerHour }) {
 
 export function meteogramSummary(hours, system) {
   const temps = hours.map((hour) => hour.tempC);
-  const rain = Math.max(...hours.map((hour) => hour.rainPercent));
-  return `Next ${hours.length} hours: temperature from ${shortTemp(Math.min(...temps), system)} to ${shortTemp(Math.max(...temps), system)}, with up to a ${rain} percent chance of rain or snow.`;
+  const probabilities = hours.map(hour => hour.rainPercent).filter(Number.isFinite);
+  const chance = probabilities.length ? `with up to a ${Math.max(...probabilities)} percent chance of rain or snow` : 'precipitation probability unavailable';
+  return `Next ${hours.length} hours: temperature from ${shortTemp(Math.min(...temps), system)} to ${shortTemp(Math.max(...temps), system)}, ${chance}.`;
 }
 
 const line = (x1, y1, x2, y2, className) => svg('line', { x1, y1, x2, y2, class: className });

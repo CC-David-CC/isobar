@@ -174,6 +174,7 @@ export const LIGHTNING = {
 
 // The whole-US alert picture. This service has no time list, so the site simply reloads it.
 export const ALERT_MAP = {
+  maximumFrameAgeMs: 5 * MINUTE,
   pane: 'alerts',
   opacity: 0.65,
   refreshMs: 5 * MINUTE,

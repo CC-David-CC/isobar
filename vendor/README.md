@@ -1,6 +1,6 @@
 # Third-party files
 
-These are copies from npm, kept in the repo so the site has no build step and doesn't depend on a CDN. Each folder keeps its license. Only `jpx` is modified, as described below.
+These are copies from npm, kept in the repo so the site has no build step and doesn't depend on a CDN. Each folder keeps its license. The WebOS adaptation exposes the bundled rendering libraries as ES modules. The MapLibre and JPEG 2000 changes are described below.
 
 | Folder | Package | Version | License |
 |---|---|---|---|
@@ -20,3 +20,5 @@ MapLibre stays on version 5 because version 6 no longer ships the single browser
 ## WebOS module adaptation
 
 For this WebOS copy, Leaflet, MapLibre and the MapLibre Leaflet binding now export native ES modules. The Leaflet velocity binding imports the private Leaflet module. The registration wrappers were changed; library versions and license files are retained. The Leaflet velocity canvas also now owns and cancels its deferred first-move timer on removal, preventing a callback against a disposed canvas. In particular, Leaflet no longer writes `window.L`, and MapLibre no longer writes `window.maplibregl`. Application code accesses these bundled instances through `js/libraries.js`.
+
+MapLibre GL 5.24.0’s RTL text plugin normally acquires a global worker dispatcher when a style merely checks plugin status. This app leaves the optional RTL plugin unconfigured. The bundled module defers dispatcher acquisition until the plugin actually broadcasts a state change, allowing MapLibre to terminate its pool when the last active map is removed. Retest close/reopen and recheck this small change when updating MapLibre.

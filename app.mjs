@@ -36,20 +36,22 @@ function loadStyle(root, path, signal) {
  * Give host a non-zero width and height. Always call dispose before discarding a window.
  */
 export function mount(host) {
-  if (!host || typeof host.appendChild !== 'function' || host.ownerDocument !== document) {
-    throw new TypeError('Isobar mount(host) expects an Element or ShadowRoot in the current document.');
+  const domHost = host?.ownerDocument === document && typeof host.appendChild === 'function';
+  if (!domHost && (!host?.w || !host?.signal)) {
+    throw new TypeError('Isobar mount(host) expects a WebOS window host or a DOM container.');
   }
   const element = document.createElement('section');
-  element.setAttribute('aria-label', 'Isobar Weather Maps');
+  element.className = 'window-content isobar-content';
+  element.setAttribute('aria-label', 'Weather Maps');
   element.setAttribute('aria-busy', 'true');
   element.dataset.state = 'loading';
-  Object.assign(element.style, { display: 'block', position: 'relative', width: '100%', height: '100%', minWidth: '0', minHeight: '0', overflow: 'hidden' });
+  Object.assign(element.style, { display: 'block', position: 'relative', flex: '1 1 auto', alignSelf: 'stretch', padding: '0', width: '100%', height: domHost ? '100%' : 'auto', minWidth: '0', minHeight: '0', overflow: 'hidden' });
   const root = element.attachShadow({ mode: 'open' });
   const surface = document.createElement('div');
   surface.className = 'isobar-root';
   surface.innerHTML = markup;
   root.append(surface);
-  host.appendChild(element);
+  if (domHost) host.appendChild(element);
   const lifetime = new AbortController();
   let stop = null;
   let disposed = false;
@@ -59,7 +61,9 @@ export function mount(host) {
     .then(() => import('./js/main.js'))
     .then(({ startIsobar }) => {
       if (disposed) return;
-      stop = startIsobar(root, surface);
+      const subject = !domHost && host.storage?.signedInSubject?.();
+      const placeKey = domHost ? 'places.standalone' : subject ? 'places.account.' + encodeURIComponent(subject) : null;
+      stop = startIsobar(root, surface, {placeKey});
       element.dataset.state = 'ready';
       element.removeAttribute('aria-busy');
     }).catch((error) => {
@@ -76,11 +80,16 @@ export function mount(host) {
   function dispose() {
     if (disposed) return;
     disposed = true;
+    if (!domHost) host.signal.removeEventListener('abort', dispose);
     lifetime.abort();
     stop?.();
     stop = null;
     element.remove();
     root.replaceChildren();
+  }
+  if (!domHost) {
+    host.signal.addEventListener('abort', dispose, {once: true});
+    if (host.signal.aborted) dispose();
   }
   return { element, dispose };
 }

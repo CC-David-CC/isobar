@@ -3,7 +3,7 @@ import { el } from './dom.js';
 import { formatCoordinates } from './format.js';
 import { load, save } from './store.js';
 
-const GEOCODER = 'https://geocoding-api.open-meteo.com/v1/search';
+const GEOCODER = '/services/weather/places';
 const WAIT_MS = 280;
 const MAX_RECENT = 6;
 
@@ -33,10 +33,11 @@ export function geocoderResults(results = []) {
 }
 
 export class PlaceSearch {
-  constructor({ input, list, onPick, root = input.getRootNode() }) {
+  constructor({ input, list, onPick, placeKey, root = input.getRootNode() }) {
     Object.assign(this, { input, list, onPick });
-    this.saved = load('places', []);
-    this.recent = load('recent', []);
+    this.placeKey = placeKey;
+    this.saved = placeKey ? load(placeKey, []) : [];
+    this.recent = [];
     this.request = null;
     this.events = new AbortController();
     if (!Array.isArray(this.saved)) this.saved = [];
@@ -81,12 +82,12 @@ export class PlaceSearch {
     } else {
       this.saved = [...this.saved, { lat: place.lat, lng: place.lng, name: place.name, detail: place.detail ?? '' }];
     }
-    save('places', this.saved);
+    if (this.placeKey) save(this.placeKey, this.saved);
   }
 
   remember(place) {
     this.recent = [place, ...this.recent.filter((item) => item.name !== place.name)].slice(0, MAX_RECENT);
-    save('recent', this.recent);
+
   }
 
   close() {
@@ -126,12 +127,12 @@ export class PlaceSearch {
     const request = new AbortController();
     this.request = request;
     try {
-      const params = new URLSearchParams({ name: text, count: '8', format: 'json' });
+      const params = new URLSearchParams({ q: text, count: '8' });
       const response = await fetch(`${GEOCODER}?${params}`, { signal: AbortSignal.any ? AbortSignal.any([request.signal, AbortSignal.timeout(15_000)]) : request.signal });
       if (!response.ok) throw new Error(`Search returned ${response.status}`);
       const { results } = await response.json();
       if (this.request !== request) return;
-      const places = geocoderResults(results);
+      const places = (results || []).map(p => ({lat: p.lat, lng: p.lon, name: p.name, detail: [p.admin1, p.country].filter(Boolean).join(', ')}));
       this.render([{ title: null, places, empty: `No places found for "${text}".` }]);
     } catch {
       if (this.request === request && !request.signal.aborted) {

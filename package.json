@@ -2,7 +2,7 @@
   "name": "isobar",
   "version": "0.1.0",
   "private": true,
-  "description": "A free, open-source live weather map built on public data. No build step and no server.",
+  "description": "Native WebOS weather globe and map using public model fields and the shared WebOS point forecast.",
   "type": "module",
   "license": "MIT",
   "scripts": {

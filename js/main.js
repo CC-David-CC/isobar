@@ -14,10 +14,10 @@ import { GlobeMap } from './globe.js';
 import { fitGlobeZoom } from './globe-helpers.js';
 import {
   GlobeAirportLayer, GlobeAlertsLayer, GlobeArcgisLayer, GlobeCycloneLayer, GlobeEventLayer, GlobeFieldLayer, GlobeFlowLayer,
-  GlobeGibsLayer, GlobeIsobarLayer, GlobeRainViewerLayer, GlobeWmsLayer,
+  GlobeGibsLayer, GlobeIsobarLayer, GlobeWmsLayer,
 } from './globe-layers.js';
 import { GridService } from './grid-service.js';
-import { ArcgisLayer, GibsLayer, RainViewerLayer } from './image-layers.js';
+import { ArcgisLayer, GibsLayer } from './image-layers.js';
 import { IsobarLayer } from './isobars.js';
 import { Panel } from './panel.js';
 import { AirportLayer, CycloneLayer, EventLayer } from './points-layers.js';
@@ -30,7 +30,7 @@ import { WmsLayer } from './wms-layer.js';
 
 import { Lifetime } from './lifetime.js';
 
-export function startIsobar(root, surface) {
+export function startIsobar(root, surface, {placeKey}) {
 const STATUS_TICK_MS = 30_000;
 const DEFAULT_FILL_OPACITY = 0.72;
 const byId = (id) => root.getElementById(id);
@@ -90,6 +90,7 @@ let model = MODELS.some((item) => item.id === savedModel) ? savedModel : 'gfs';
 const prefersStillness = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const savedLayers = load('layers');
 const enabled = new Set(Array.isArray(savedLayers) ? savedLayers : prefersStillness ? [opening.radar] : ['wind', opening.radar]);
+if (enabled.delete('worldradar')) enabled.add('satellite');
 const windStyle = { ...WIND.style, ...(load('windStyle') ?? {}) };
 let windLevel = load('windLevel') ?? 'flow10';
 if (!FLOW_LEVELS.some((level) => level.id === windLevel)) windLevel = 'flow10';
@@ -162,16 +163,9 @@ const windExtras = () => {
   );
 };
 
-const radarLoopButton = el('button', {
-  type: 'button',
-  class: 'text-button',
-  text: 'Play the last 2 hours',
-  onClick: () => (controllers.worldradar.isPlaying ? controllers.worldradar.stopLoopPlayback() : controllers.worldradar.playLoop()),
-});
-
 // The same layers draw on the flat map or the globe. These are the classes for each.
 const FLAT_LAYERS = {
-  AirportLayer, AlertsLayer, ArcgisLayer, CycloneLayer, EventLayer, FieldLayer, FlowLayer, GibsLayer, IsobarLayer, RainViewerLayer, WmsLayer,
+  AirportLayer, AlertsLayer, ArcgisLayer, CycloneLayer, EventLayer, FieldLayer, FlowLayer, GibsLayer, IsobarLayer, WmsLayer,
 };
 const GLOBE_LAYERS = {
   AirportLayer: GlobeAirportLayer,
@@ -183,7 +177,6 @@ const GLOBE_LAYERS = {
   FlowLayer: GlobeFlowLayer,
   GibsLayer: GlobeGibsLayer,
   IsobarLayer: GlobeIsobarLayer,
-  RainViewerLayer: GlobeRainViewerLayer,
   WmsLayer: GlobeWmsLayer,
 };
 
@@ -191,13 +184,6 @@ function makeControllers(target, kinds) {
   return {
     wind: new kinds.FlowLayer(target, service, { fieldId: windLevel, getModel, getTime, onStatus: statusFor('wind'), pane: 'wind', attribution: WIND.attribution, style: windStyle }),
     radar: new kinds.WmsLayer(target, RADAR, statusFor('radar')),
-    worldradar: new kinds.RainViewerLayer(target, {
-      onStatus: statusFor('worldradar'),
-      onLoopChange: (playing) => { radarLoopButton.textContent = playing ? 'Stop the loop' : 'Play the last 2 hours'; },
-      pane: 'worldradar',
-      opacity: 0.85,
-      attribution: link('https://www.rainviewer.com/', 'Weather data by RainViewer'),
-    }),
     lightning: new kinds.WmsLayer(target, LIGHTNING, statusFor('lightning')),
     satellite: new kinds.WmsLayer(target, SATELLITE, statusFor('satellite')),
     alerts: new kinds.AlertsLayer(target, statusFor('alerts')),
@@ -221,7 +207,6 @@ function makeControllers(target, kinds) {
 const overlayDefinitions = [
   { id: 'wind', name: 'Wind flow', timed: true, legend: (units) => ({ stops: WIND.style.colorScale, low: 'Calm', high: `${fullSpeed(WIND.style.maxVelocity, units)}+` }), extras: windExtras },
   { id: 'radar', name: 'Radar (US)', legend: LEGENDS.radar },
-  { id: 'worldradar', name: 'Radar (world)', legend: LEGENDS.worldradar, extras: () => radarLoopButton },
   { id: 'lightning', name: 'Lightning', legend: LEGENDS.lightning },
   { id: 'satellite', name: 'Satellite', legend: LEGENDS.satellite },
   { id: 'alerts', name: 'Alerts', hint: LEGENDS.alerts.note },
@@ -338,7 +323,10 @@ panel.setModel(model);
 
 // Keep the "2 min old" labels moving between data updates.
 const statusTimer = setInterval(() => {
-  if (!document.hidden) panel.refreshStatuses();
+  if (!document.hidden) {
+    panel.refreshStatuses();
+    if (strip.isOpen) strip.renderAlerts();
+  }
 }, STATUS_TICK_MS);
 lifetime.add(() => clearInterval(statusTimer));
 
@@ -368,6 +356,7 @@ const strip = new ForecastStrip(byId('strip'), {
   surface,
   getSystem: () => system,
   getMapValue: mapValueAt,
+  fieldContext: () => ({service, model, time: getTime()}),
   onOpened: keepSpotInView,
   onClosed: () => {
     view.clearSpot();
@@ -444,6 +433,7 @@ hint.hidden = load('hintDismissed', false);
 
 // ---- Finding a place ----
 search = new PlaceSearch({
+  placeKey,
   root,
   input: byId('place-input'),
   list: byId('place-results'),

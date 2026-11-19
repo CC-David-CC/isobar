@@ -128,6 +128,7 @@ export class GibsLayer extends TileLayerBase {
 
   makeLayer() {
     return L.tileLayer(this.template(this.time), {
+      crossOrigin: true,
       pane: this.pane,
       opacity: this.opacity,
       maxNativeZoom: this.entry.level,
@@ -312,6 +313,7 @@ export class ArcgisLayer extends TileLayerBase {
   makeLayer() {
     const Tiles = this.entry.clearWhite ? ClearWhiteTiles : ArcgisTiles;
     return new Tiles(`${NOAA_SERVICES}/${this.entry.service}`, {
+      crossOrigin: true,
       pane: this.pane,
       opacity: this.opacity,
       tileSize: 512,

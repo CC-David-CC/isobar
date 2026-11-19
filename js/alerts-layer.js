@@ -38,6 +38,13 @@ export class AlertsLayer {
     return new WmsLayer(this.map, ALERT_MAP, onStatus);
   }
 
+  clearStorms() {
+    clearTimeout(this.expiry);
+    if (this.drawn) this.map.removeLayer(this.drawn);
+    this.drawn = null;
+    this.stormCount = null;
+  }
+
   reset() {
     this.mapStatus = { state: 'loading' };
     this.stormCount = null;
@@ -58,24 +65,38 @@ export class AlertsLayer {
   stop() {
     this.active = false;
     this.stopLoop?.();
+    this.request = null;
     this.mapLayer.stop();
-    if (this.drawn) this.map.removeLayer(this.drawn);
+    this.clearStorms();
     this.reset();
   }
 
   async loadStorms() {
     if (this.mapStatus.state === 'outside') return;
+    const request = this.request = {};
     try {
       const response = await fetch(stormUrl(), { signal: requestSignal(this.map, 20_000) });
       if (!response.ok) throw new Error(`Alert feed returned ${response.status}`);
       const { features } = await response.json();
-      if (!this.active) return;
-      this.draw(features);
-      this.stormCount = features.length;
-      this.stormsFailed = false;
+      if (!this.active || this.request !== request) return;
       this.checkedAt = Date.now();
+      const valid = features.filter(({properties}) => properties.status === 'Actual' &&
+        Date.parse(properties.expires) > this.checkedAt &&
+        (!properties.ends || Date.parse(properties.ends) > this.checkedAt));
+      this.clearStorms();
+      this.draw(valid);
+      this.stormCount = valid.length;
+      this.stormsFailed = false;
+      const expires = valid.flatMap(({properties}) => [properties.expires, properties.ends])
+        .map(Date.parse).filter(Number.isFinite);
+      const lifetime = Math.min(2 * STORM_WARNINGS.refreshMs, ...expires.map(time => time - this.checkedAt));
+      this.expiry = setTimeout(() => {
+        this.clearStorms();
+        this.report();
+      }, lifetime);
     } catch (error) {
-      if (!this.active) return;
+      if (!this.active || this.request !== request) return;
+      this.clearStorms();
       this.stormsFailed = true;
       this.report();
       throw error;

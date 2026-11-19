@@ -47,6 +47,7 @@ class Part {
 
   remove() {
     this.pause();
+    clearTimeout(this.expiry);
     this.token += 1;
     const { map } = this.owner;
     this.cancelPending?.();
@@ -68,6 +69,15 @@ class Part {
         await this.showFrame(time, token);
         if (token !== this.token) return;
         this.time = time;
+        if (owner.options.maximumFrameAgeMs) {
+          clearTimeout(this.expiry);
+          this.expiry = setTimeout(() => {
+            if (this.frame) owner.map.removeLayer(this.frame);
+            this.frame = null;
+            this.status = {state: 'loading'};
+            owner.report();
+          }, owner.options.maximumFrameAgeMs);
+        }
       }
       this.status = spec.capabilitiesUrl
         ? { state: 'ok', dataTime: Date.parse(time), staleAfterMs: spec.staleAfterMs ?? owner.options.staleAfterMs }
@@ -75,6 +85,11 @@ class Part {
       owner.report();
     } catch (error) {
       if (token !== this.token) return;
+      if (owner.options.maximumFrameAgeMs && this.frame) {
+        clearTimeout(this.expiry);
+        owner.map.removeLayer(this.frame);
+        this.frame = null;
+      }
       this.status = { state: 'error', message: CANT_REACH, dataTime: lastData };
       owner.report();
       throw error;
@@ -115,7 +130,7 @@ class Part {
           resolve();
           return;
         }
-        if (failed > 0 && loaded === 0) {
+        if (loaded === 0 && (failed > 0 || options.maximumFrameAgeMs)) {
           map.removeLayer(next);
           reject(new Error('Every image request failed'));
           return;
@@ -154,6 +169,7 @@ export class WmsLayer {
       layers: spec.layer,
       format: 'image/png',
       transparent: true,
+      crossOrigin: true,
       version: '1.3.0',
       crs: L.CRS.EPSG3857,
       tileSize: 512,

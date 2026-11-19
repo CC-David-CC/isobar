@@ -25,7 +25,10 @@ async function fetchField(url, entry) {
   // parts of one NOAA file for up to 30 s, and hung on every other part from ECMWF. Without it they
   // take under a second. GridService keeps recent results in memory instead. Tested 2026-11-06.
   const response = await fetch(url, { headers: { Range: range }, cache: 'no-store', signal: AbortSignal.timeout(TIMEOUT_MS) });
-  if (response.status !== 206) throw new Error(`Expected part of the file, got HTTP ${response.status}`);
+  if (response.status !== 206) {
+    await response.body?.cancel();
+    throw new Error(`Expected part of the file, got HTTP ${response.status}`);
+  }
   const bytes = new Uint8Array(await response.arrayBuffer());
   const jpeg2000 = dataTemplate(bytes) === 40 ? await loadJpeg2000() : undefined;
   return northUp(decodeGrib2(bytes, { jpeg2000 }));

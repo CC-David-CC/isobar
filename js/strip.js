@@ -1,18 +1,18 @@
 // The chart-paper strip that opens when someone picks a spot on the map.
 import { el } from './dom.js';
-import { loadAlertsAt, loadForecast } from './forecast.js';
+import { loadForecast } from './webos-forecast.js';
 import { formatClock, formatCoordinates } from './format.js';
 import { drawMeteogram } from './meteogram.js';
-import { loadComparison, loadSection, renderComparison, renderSection } from './point-data.js';
+import { pointFields, renderPointFields } from './point-fields.js';
 import { describeWind, fullTemp, shortTemp } from './units.js';
 
 
 export class ForecastStrip {
-  constructor(root, { surface, getSystem, getMapValue, onOpened, onClosed, isSaved, onToggleSaved }) {
+  constructor(root, { surface, getSystem, getMapValue, fieldContext, onOpened, onClosed, isSaved, onToggleSaved }) {
     const scope = root.getRootNode();
     const byId = (id) => scope.getElementById(id);
     this.surface = surface;
-    Object.assign(this, { root, getSystem, getMapValue, onOpened, onClosed, isSaved, onToggleSaved });
+    Object.assign(this, { root, getSystem, getMapValue, fieldContext, onOpened, onClosed, isSaved, onToggleSaved });
     this.tab = 'forecast';
     this.tabData = new Map();
     this.mapValue = byId('strip-map-value');
@@ -103,18 +103,19 @@ export class ForecastStrip {
   async loadTab(tab) {
     const point = this.point;
     const signal = this.request.signal;
-    const cached = this.tabData.get(tab);
+    const fields = this.fieldContext();
+    const key = [tab, fields.model, Math.round(fields.time / 3600000)].join('|');
+    const cached = this.tabData.get(key);
     if (cached) {
       this.renderTab(tab, cached);
       return;
     }
     this.tabPanel.replaceChildren(el('p', { class: 'alerts-note', text: 'Loading' }));
     try {
-      const data = tab === 'models'
-        ? await loadComparison(point.lat, point.lng, signal)
-        : await loadSection(tab, point.lat, point.lng, signal);
+      const data = await pointFields(tab, point.lat, point.lng, {...fields, signal});
       if (this.point !== point) return;
-      this.tabData.set(tab, data);
+      if (this.tabData.size > 12) this.tabData.clear();
+      this.tabData.set(key, data);
       if (this.tab === tab) this.renderTab(tab, data);
     } catch {
       if (this.point !== point || signal.aborted || this.tab !== tab) return;
@@ -126,8 +127,7 @@ export class ForecastStrip {
   }
 
   renderTab(tab, data) {
-    if (tab === 'models') renderComparison(this.tabPanel, data, this.getSystem());
-    else renderSection(this.tabPanel, tab, data, this.getSystem());
+    renderPointFields(this.tabPanel, data, this.getSystem());
   }
 
   async open({ lat, lng, name }) {
@@ -155,16 +155,16 @@ export class ForecastStrip {
       this.render();
       this.onOpened?.();
     };
-    await Promise.all([
-      loadForecast(lat, lng, { signal }).then(
-        whenCurrent((data) => { this.forecast = { state: 'ready', data }; }),
-        whenCurrent(() => { this.forecast = { state: 'failed' }; }),
-      ),
-      loadAlertsAt(lat, lng, { signal }).then(
-        whenCurrent((result) => { this.alerts = result; }),
-        whenCurrent(() => { this.alerts = { state: 'failed', alerts: [] }; }),
-      ),
-    ]);
+    await loadForecast(lat, lng, {signal}).then(
+      whenCurrent(data => {
+        this.forecast = {state: 'ready', data};
+        this.alerts = data.alerts;
+      }),
+      whenCurrent(() => {
+        this.forecast = {state: 'failed'};
+        this.alerts = {state: 'failed', alerts: []};
+      }),
+    );
   }
 
   close() {
@@ -190,7 +190,7 @@ export class ForecastStrip {
   refresh() {
     if (!this.isOpen) return;
     this.render();
-    if (this.tab !== 'forecast' && this.tabData.has(this.tab)) this.renderTab(this.tab, this.tabData.get(this.tab));
+    if (this.tab !== 'forecast') this.loadTab(this.tab);
   }
 
   render() {
@@ -223,13 +223,14 @@ export class ForecastStrip {
   }
 
   renderAlerts() {
-    const { state, alerts } = this.alerts;
+    const {state} = this.alerts;
+    const alerts = this.alerts.alerts?.filter(a => a.until > Date.now());
     const box = this.alertsBox;
     const timeZone = this.forecast.data?.timeZone;
     const quiet = (text) => box.replaceChildren(el('p', { class: 'alerts-note', text }));
     if (state === 'loading') {
       quiet('Checking alerts');
-    } else if (state === 'failed') {
+    } else if (state === 'failed' || this.alerts.validUntil <= Date.now()) {
       box.replaceChildren(el('p', { class: 'alerts-note alerts-failed' },
         "Couldn't check alerts for this spot. ",
         el('a', { href: 'https://www.weather.gov/', target: '_blank', rel: 'noopener', text: 'See weather.gov' }),
@@ -238,7 +239,7 @@ export class ForecastStrip {
     } else if (state === 'notCovered') {
       quiet('Official alerts cover the US and nearby waters only.');
     } else if (alerts.length === 0) {
-      quiet('No active alerts here.');
+      quiet('No active warnings in the last NWS update.');
     } else {
       box.replaceChildren(el('ul', { class: 'alert-list' }, ...alerts.map((alert) => el('li', {},
         el('details', { class: `alert alert-${alert.severity.toLowerCase()}` },
@@ -246,9 +247,9 @@ export class ForecastStrip {
             el('strong', { text: alert.event }),
             alert.until ? ` until ${formatClock(alert.until, { timeZone })}` : null,
           ),
-          el('p', { class: 'alert-text', text: alert.description }),
+          alert.description ? el('p', { class: 'alert-text', text: alert.description }) : null,
           alert.instruction ? el('p', { class: 'alert-text', text: alert.instruction }) : null,
-          el('p', { class: 'alert-area', text: `Area: ${alert.area}` }),
+          alert.area ? el('p', { class: 'alert-area', text: `Area: ${alert.area}` }) : null,
         ),
       ))));
     }
@@ -278,22 +279,15 @@ export class ForecastStrip {
       this.source.replaceChildren();
       return;
     }
-    const timeZone = data.timeZone;
-    const official = ' Not an official source. For warnings you can act on, use weather.gov.';
-    if (data.source === 'nws') {
-      const issued = data.issuedAt ? `, issued ${formatClock(data.issuedAt, { timeZone })}` : '';
-      this.source.replaceChildren(
-        `Forecast from the National Weather Service${issued}. `,
-        el('a', { href: data.link, target: '_blank', rel: 'noopener', text: 'Open on weather.gov' }),
-        `.${official}`,
-      );
-    } else {
-      this.source.replaceChildren(
-        data.nwsFailed ? "The National Weather Service didn't respond, so this comes from another source. " : '',
-        el('a', { href: data.link, target: '_blank', rel: 'noopener', text: 'Weather data by Open-Meteo.com' }),
-        `.${official}`,
-      );
-    }
+    const nws = data.source === 'nws';
+    const date = data.issuedAt || data.fetchedAt;
+    const time = date ? new Date(date).toLocaleString(undefined, {timeZone: data.timeZone, timeZoneName: 'short'}) : null;
+    this.source.replaceChildren(
+      data.stale ? 'Last-known forecast · ' : '',
+      el('a', {href: nws ? 'https://www.weather.gov/' : 'https://api.met.no/', target: '_blank',
+        rel: 'noopener', text: nws ? 'National Weather Service' : 'MET Norway · CC BY 4.0'}),
+      time ? (data.issuedAt ? ' · Issued ' : ' · Retrieved ') + time : '',
+    );
   }
 
   drawChart() {
@@ -323,6 +317,7 @@ export class ForecastStrip {
     const { timeZone } = this.forecast.data;
     this.readout.hidden = false;
     this.key.classList.add('is-covered');
-    this.readout.textContent = `${formatClock(hour.start, { timeZone })}: ${fullTemp(hour.tempC, system)}, ${hour.rainPercent}% chance of rain or snow. ${describeWind(hour.windMs, hour.windFromDegrees, system)}. ${hour.summary}.`;
+    const rain = hour.rainPercent == null ? 'Precipitation probability unavailable' : hour.rainPercent + '% chance of rain or snow';
+    this.readout.textContent = `${formatClock(hour.start, { timeZone })}: ${fullTemp(hour.tempC, system)}, ${rain}. ${describeWind(hour.windMs, hour.windFromDegrees, system)}. ${hour.summary}.`;
   }
 }

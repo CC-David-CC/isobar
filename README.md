@@ -6,7 +6,7 @@ A free, open-source live weather map of the whole world. It has animated wind an
 
 **Live site: <https://us2id.github.io/isobar/>**
 
-It's a static site with no server and no database. Each visitor's browser fetches the latest data directly from the public services below and keeps checking while the page is open, so nothing has to be loaded by hand and hosting costs nothing.
+Its map renderer runs in the browser. Point forecasts and place-name searches use the shared WebOS weather backend.
 
 ## What's on the map
 
@@ -16,7 +16,6 @@ The map opens as a 3D globe. A button switches to a flat map and back, and every
 |---|---|---|
 | Wind flow, at 8 heights | NOAA GFS or ECMWF | World |
 | Radar (US) | [NWS MRMS](https://opengeo.ncep.noaa.gov/geoserver/www/index.html) | US |
-| Radar (world), with a 2-hour loop | [RainViewer](https://www.rainviewer.com/), up to zoom 7 | Wherever radars report |
 | Lightning | [NOAA nowCOAST](https://nowcoast.noaa.gov/) | Americas and Pacific |
 | Satellite | NOAA nowCOAST | World |
 | Alerts | nowCOAST and [api.weather.gov](https://www.weather.gov/documentation/services-web-api) | US |
@@ -31,7 +30,7 @@ The color layers come from two kinds of source:
 - **Forecast fields**, read value by value in the browser, so the map can show a number under the cursor and move through time up to 16 days ahead: [NOAA GFS](https://registry.opendata.aws/noaa-gfs-bdp-pds/), GFS Wave, GEFS Aerosols and CFS Ocean, and [ECMWF IFS and AIFS open data](https://www.ecmwf.int/en/forecasts/datasets/open-data). Reference evapotranspiration (FAO-56) and growing degree days are computed from those fields.
 - **Finished images**: [NASA GIBS](https://earthdata.nasa.gov/gibs) satellite products, and NOAA's outlooks, hazards, rainfall and river services. These can't show a number under the cursor.
 
-Clicking the map shows the next 48 hours and 7 days from the National Weather Service inside the US, and from [Open-Meteo](https://open-meteo.com/) elsewhere or when NWS is down, with any active alerts for that spot. Tabs add more weather, soil and farming, air quality, sea and rivers, and a comparison of 8 forecast models.
+Clicking the map shows up to 48 hours and seven forecast days from NWS within coverage and MET Norway elsewhere. Additional tabs sample soil, sea, aerosol and other model fields; the model comparison shows NOAA GFS and ECMWF IFS and AIFS.
 
 The moving lines follow the forecast and are sped up so you can see them. They don't show the air or water moving live.
 
@@ -106,8 +105,8 @@ There's no framework and no build step. What's in `js/` is exactly what the brow
 
 - NOAA, NWS and NASA data is public domain. Please keep the credit lines and don't make this look like an official site.
 - [ECMWF open data](https://www.ecmwf.int/en/forecasts/datasets/open-data) is CC BY 4.0.
-- [RainViewer](https://www.rainviewer.com/api.html)'s free API is for personal, educational and small community use, and requires the "Weather data by RainViewer" credit beside its data. It's limited to zoom 7 and 100 requests a minute for each visitor.
-- [Open-Meteo](https://open-meteo.com/) data is CC BY 4.0, and its free API is for non-commercial use, under 10,000 calls a day. Keep the "Weather data by Open-Meteo.com" link beside its data.
+- The original [RainViewer](https://www.rainviewer.com/api.html)'s free API is for personal, educational and small community use, and requires the "Weather data by RainViewer" credit beside its data. It's limited to zoom 7 and 100 requests a minute for each visitor.
+- The optional upstream developer cross-check uses [Open-Meteo](https://open-meteo.com/) data is CC BY 4.0, and its free API is for non-commercial use, under 10,000 calls a day. Keep the "Weather data by Open-Meteo.com" link beside its data.
 - [GDACS](https://www.gdacs.org/) cyclone data and [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) airport data are credited on the map while those layers are on.
 - The base map is [OpenFreeMap](https://openfreemap.org/) with [OpenMapTiles](https://www.openmaptiles.org/) and [OpenStreetMap](https://www.openstreetmap.org/copyright) data, drawn by [MapLibre GL](https://maplibre.org/) on the globe and through [Leaflet](https://leafletjs.com/) on the flat map. Keep their credits.
 - The bundled libraries and font are listed in [vendor/README.md](vendor/README.md).
