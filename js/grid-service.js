@@ -3,6 +3,7 @@
 const CACHE_SIZE = 12;
 const TIMEOUT_MS = 180_000;
 const HOUR = 3_600_000;
+const CACHE_AGE_MS = 15 * 60_000;
 
 export class GridService {
   constructor() {
@@ -56,11 +57,13 @@ export class GridService {
     if (this.disposed) return Promise.reject(new DOMException('App closed', 'AbortError'));
     const hour = Math.round(time / HOUR) * HOUR;
     const key = `${fieldId}|${model}|${hour}|${thin}`;
-    if (this.cache.has(key)) {
-      const result = this.cache.get(key);
+    const cached = this.cache.get(key);
+    if (cached) {
       this.cache.delete(key);
-      this.cache.set(key, result);
-      return Promise.resolve(result);
+      if (Date.now() - cached.fetchedAt < CACHE_AGE_MS) {
+        this.cache.set(key, cached);
+        return Promise.resolve(cached.result);
+      }
     }
     if (this.inFlight.has(key)) return this.inFlight.get(key);
     const promise = new Promise((resolve, reject) => {
@@ -79,7 +82,7 @@ export class GridService {
       }
     }).then((result) => {
       if (this.disposed) throw new DOMException('App closed', 'AbortError');
-      this.cache.set(key, result);
+      this.cache.set(key, { result, fetchedAt: Date.now() });
       if (this.cache.size > CACHE_SIZE) this.cache.delete(this.cache.keys().next().value);
       return result;
     }).finally(() => {

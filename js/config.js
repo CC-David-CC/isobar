@@ -85,7 +85,7 @@ const radarParts = (suffix) => RADAR_REGIONS.map(([workspace, box]) => radarRegi
 export const RADAR = {
   pane: 'radar',
   opacity: 0.85,
-  refreshMs: 2 * MINUTE,
+  refreshMs: 15 * MINUTE,
   retryMs: MINUTE,
   staleAfterMs: 20 * MINUTE,
   merge: 'oldest',
@@ -105,7 +105,7 @@ const WORLD_BOX = { west: -180, east: 180, south: -85, north: 85 };
 
 // Extra NOAA nowCOAST satellite views.
 export const wmsImageConfig = (entry) => ({
-  refreshMs: 5 * MINUTE,
+  refreshMs: 15 * MINUTE,
   retryMs: 2 * MINUTE,
   staleAfterMs: (entry.stale ?? 60) * MINUTE,
   merge: 'oldest',
@@ -133,7 +133,7 @@ const satellitePart = (id, pane, layer, box, staleAfterMs) => ({
 
 export const SATELLITE = {
   opacity: 0.9,
-  refreshMs: 5 * MINUTE,
+  refreshMs: 15 * MINUTE,
   retryMs: 2 * MINUTE,
   merge: 'first',
   attribution: 'Satellite: <a href="https://nowcoast.noaa.gov/">NOAA nowCOAST</a>',
@@ -153,7 +153,7 @@ const lightningService = `${NOWCOAST}/observations/lightning_detection`;
 export const LIGHTNING = {
   pane: 'lightning',
   opacity: 1,
-  refreshMs: 5 * MINUTE,
+  refreshMs: 15 * MINUTE,
   retryMs: 2 * MINUTE,
   staleAfterMs: 60 * MINUTE,
   merge: 'oldest',

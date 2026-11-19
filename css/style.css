@@ -572,15 +572,6 @@ h2 { font-size: 21px; font-weight: 700; }
   border-radius: 6px;
   transform: translateX(-50%);
 }
-#timeline [data-action="play"] {
-  flex: none;
-  width: 56px;
-  padding: 3px 0;
-  background: none;
-  border: 1px solid var(--night-line);
-  border-radius: 4px;
-  cursor: pointer;
-}
 #timeline input { flex: 1; min-width: 60px; accent-color: var(--lamp); }
 #timeline output { flex: none; min-width: 60px; font-size: 12px; white-space: nowrap; }
 #timeline .quiet-button { flex: none; }

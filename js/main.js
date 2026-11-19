@@ -104,7 +104,6 @@ let fillId = null;
 const timeline = new Timeline(byId('timeline'), {
   surface,
   onChange: () => updateTimedLayers(),
-  isBusy: () => service.inFlight.size > 0,
 });
 lifetime.add(() => timeline.dispose());
 const getTime = () => timeline.time();

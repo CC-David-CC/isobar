@@ -5,7 +5,6 @@ import { formatForecastTime } from './format.js';
 const HOUR = 3_600_000;
 const MAX_HOURS = 384;
 const SETTLE_MS = 250;
-const PLAY_MS = 1400;
 
 export const timelineSteps = () => {
   const steps = [];
@@ -21,23 +20,18 @@ export function describeOffset(hours) {
 }
 
 export class Timeline {
-  constructor(root, { onChange, isBusy, surface = root }) {
-    Object.assign(this, { root, onChange, isBusy, surface });
+  constructor(root, { onChange, surface = root }) {
+    Object.assign(this, { root, onChange, surface });
     this.steps = timelineSteps();
     this.index = 0;
-    this.playing = null;
     this.range = root.querySelector('input');
     this.label = root.querySelector('output');
-    this.playButton = root.querySelector('[data-action=play]');
     this.nowButton = root.querySelector('[data-action=now]');
     this.range.max = String(this.steps.length - 1);
     this.range.addEventListener('input', () => {
-      this.stop();
       this.setIndex(Number(this.range.value));
     });
-    this.playButton.addEventListener('click', () => (this.playing ? this.stop() : this.play()));
     this.nowButton.addEventListener('click', () => {
-      this.stop();
       this.range.value = '0';
       this.setIndex(0);
     });
@@ -52,7 +46,6 @@ export class Timeline {
   setVisible(visible) {
     this.root.hidden = !visible;
     this.surface.classList.toggle('has-timeline', visible);
-    if (!visible) this.stop();
   }
 
   setIndex(index) {
@@ -62,27 +55,7 @@ export class Timeline {
     this.settle = setTimeout(() => this.onChange(), SETTLE_MS);
   }
 
-  play() {
-    this.playButton.textContent = 'Pause';
-    this.playing = setInterval(() => {
-      if (document.hidden || this.isBusy()) return;
-      const next = this.index + 1 >= this.steps.length ? 0 : this.index + 1;
-      this.range.value = String(next);
-      this.index = next;
-      this.render();
-      this.onChange();
-    }, PLAY_MS);
-  }
-
-  stop() {
-    if (!this.playing) return;
-    clearInterval(this.playing);
-    this.playing = null;
-    this.playButton.textContent = 'Play';
-  }
-
   dispose() {
-    this.stop();
     clearTimeout(this.settle);
   }
 
