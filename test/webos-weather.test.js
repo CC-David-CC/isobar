@@ -6,7 +6,7 @@ const now = Date.parse('2026-06-07T12:00:00Z');
 const time = offset => new Date(now + offset).toISOString();
 function snapshot() {
   return {provider: 'nws', place: {name: 'Kent'}, timezone: 'America/New_York',
-    fetchedAt: time(0), hourly: [{time: time(0), temperature: 12, windSpeed: 36, summary: 'Light rain'}],
+    forecastIssuedAt: time(-60000), fetchedAt: time(0), hourly: [{time: time(0), temperature: 12, windSpeed: 36, summary: 'Light rain'}],
     daily: [{source: 'forecast', date: '2026-06-08', max: 20, min: 12},
       {source: 'climate', date: '2026-06-09', max: 28, min: 10}],
     alertStatus: 'current', alertsValidUntil: time(60_000), freshness: {stale: false},
@@ -16,6 +16,7 @@ function snapshot() {
 test('shared forecast converts wind units, keeps missing probability and excludes climate averages', () => {
   const data = forecastFromSnapshot(snapshot(), 41, -81, now);
   assert.equal(data.hours[0].windMs, 10);
+  assert.equal(data.issuedAt, now - 60000);
   assert.equal(data.hours[0].tempC, 12);
   assert.equal(data.hours[0].rainPercent, null);
   assert.equal(data.days.length, 1);

@@ -24,7 +24,7 @@ export function forecastFromSnapshot(snapshot, lat, lng, now = Date.now()) {
   }));
   return {source: snapshot.provider, place: snapshot.place?.name || formatCoordinates(lat, lng),
     hours, days, timeZone, stale: snapshot.freshness?.stale === true,
-    issuedAt: Date.parse(snapshot.forecastUpdatedAt) || null, fetchedAt: Date.parse(snapshot.fetchedAt) || null,
+    issuedAt: Date.parse(snapshot.forecastIssuedAt) || null, fetchedAt: Date.parse(snapshot.fetchedAt) || null,
     alerts: activeAlerts(snapshot, now)};
 }
 
