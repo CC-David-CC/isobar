@@ -7,6 +7,7 @@ const HOUR = 3_600_000;
 export class GridService {
   constructor() {
     this.worker = null;
+    this.disposed = false;
     this.waiting = new Map();
     this.cache = new Map();
     this.inFlight = new Map();
@@ -14,6 +15,7 @@ export class GridService {
   }
 
   ensureWorker() {
+    if (this.disposed) throw new DOMException('App closed', 'AbortError');
     if (this.worker) return this.worker;
     const worker = new Worker(new URL('./grid-worker.js', import.meta.url), { type: 'module' });
     worker.onmessage = ({ data }) => {
@@ -41,8 +43,17 @@ export class GridService {
     this.waiting.clear();
   }
 
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.failAll(new DOMException('App closed', 'AbortError'));
+    this.cache.clear();
+    this.inFlight.clear();
+  }
+
   // time is when the map should show, in ms. Results for the same hour are shared.
   load(fieldId, model, time, thin = 1) {
+    if (this.disposed) return Promise.reject(new DOMException('App closed', 'AbortError'));
     const hour = Math.round(time / HOUR) * HOUR;
     const key = `${fieldId}|${model}|${hour}|${thin}`;
     if (this.cache.has(key)) {
@@ -53,14 +64,21 @@ export class GridService {
     }
     if (this.inFlight.has(key)) return this.inFlight.get(key);
     const promise = new Promise((resolve, reject) => {
+      const worker = this.ensureWorker();
       const id = this.nextId++;
       const timer = setTimeout(() => {
         this.waiting.delete(id);
         reject(new Error('Data download timed out'));
       }, TIMEOUT_MS);
       this.waiting.set(id, { resolve, reject, timer });
-      this.ensureWorker().postMessage({ id, fieldId, model, time: hour, thin });
+      try { worker.postMessage({ id, fieldId, model, time: hour, thin }); }
+      catch (error) {
+        clearTimeout(timer);
+        this.waiting.delete(id);
+        reject(error);
+      }
     }).then((result) => {
+      if (this.disposed) throw new DOMException('App closed', 'AbortError');
       this.cache.set(key, result);
       if (this.cache.size > CACHE_SIZE) this.cache.delete(this.cache.keys().next().value);
       return result;

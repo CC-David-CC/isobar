@@ -1,3 +1,5 @@
+import { L } from './libraries.js';
+import { requestSignal } from './lifetime.js';
 // Layers that arrive as finished map images: NASA GIBS, NOAA map services and RainViewer.
 import { chooseGibsTime, dayBefore, describeGibsTime, isDailyStamp } from './gibs-day.js';
 import { repeatWhileVisible } from './schedule.js';
@@ -15,24 +17,49 @@ const ZOOM_IN = 'Zoom in to see this layer.';
 // Tiles drawn on a canvas handle their own retry.
 function watchTiles(layer, onResult) {
   const retried = new WeakSet();
+  const retries = new Map();
   let loaded = 0;
   let failed = 0;
-  layer.on('loading', () => {
+  const onLoading = () => {
     loaded = 0;
     failed = 0;
-  });
-  layer.on('tileload', () => { loaded += 1; });
-  layer.on('tileerror', ({ tile, coords }) => {
+  };
+  const onTileLoad = () => { loaded += 1; };
+  const onTileUnload = ({ tile }) => {
+    clearTimeout(retries.get(tile));
+    retries.delete(tile);
+  };
+  const onTileError = ({ tile, coords }) => {
     if (tile.tagName === 'IMG' && !retried.has(tile)) {
       retried.add(tile);
-      setTimeout(() => { tile.src = layer.getTileUrl(coords); }, TILE_RETRY_MS);
+      retries.set(tile, setTimeout(() => {
+        retries.delete(tile);
+        if (layer._map && tile.parentNode) tile.src = layer.getTileUrl(coords);
+      }, TILE_RETRY_MS));
     } else {
       failed += 1;
     }
-  });
-  layer.on('load', () => {
+  };
+  const onLoad = () => {
     if (loaded > 0 || failed > 0) onResult(loaded, failed);
-  });
+  };
+  const stop = () => {
+    for (const timer of retries.values()) clearTimeout(timer);
+    retries.clear();
+    layer.off('loading', onLoading);
+    layer.off('tileload', onTileLoad);
+    layer.off('tileunload', onTileUnload);
+    layer.off('tileerror', onTileError);
+    layer.off('load', onLoad);
+    layer.off('remove', stop);
+  };
+  layer.on('loading', onLoading);
+  layer.on('tileload', onTileLoad);
+  layer.on('tileunload', onTileUnload);
+  layer.on('tileerror', onTileError);
+  layer.on('load', onLoad);
+  layer.on('remove', stop);
+  return stop;
 }
 
 class TileLayerBase {
@@ -51,7 +78,7 @@ class TileLayerBase {
 
   show() {
     this.layer = this.makeLayer();
-    watchTiles(this.layer, (loaded, failed) => {
+    this.stopTileWatch = watchTiles(this.layer, (loaded, failed) => {
       if (!this.active) return;
       clearTimeout(this.retryTimer);
       if (failed > 0 && loaded === 0) {
@@ -68,6 +95,8 @@ class TileLayerBase {
     this.active = false;
     clearTimeout(this.retryTimer);
     this.stopLoop?.();
+    this.stopTileWatch?.();
+    this.stopTileWatch = null;
     if (this.layer) this.map.removeLayer(this.layer);
     this.layer = null;
   }
@@ -120,7 +149,7 @@ export class GibsLayer extends TileLayerBase {
     let lastError;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+        const response = await fetch(url, { signal: requestSignal(this.map, 20_000) });
         if (!response.ok) throw new Error(`NASA returned ${response.status}`);
         return response.headers.get('layer-time-actual');
       } catch (error) {
@@ -200,6 +229,16 @@ const ArcgisTiles = L.TileLayer.extend({
 // For services that paint "nothing to report" in plain white, which glares on a dark map.
 const WHITE = 245;
 const ClearWhiteTiles = ArcgisTiles.extend({
+  initialize(baseUrl, options) {
+    ArcgisTiles.prototype.initialize.call(this, baseUrl, options);
+    this.pendingTiles = new Map();
+    this.on('tileunload', ({ tile }) => this.pendingTiles.get(tile)?.());
+  },
+  onRemove(map) {
+    for (const cancel of this.pendingTiles.values()) cancel();
+    this.pendingTiles.clear();
+    ArcgisTiles.prototype.onRemove.call(this, map);
+  },
   createTile(coords, done) {
     const canvas = document.createElement('canvas');
     const size = this.getTileSize();
@@ -207,25 +246,44 @@ const ClearWhiteTiles = ArcgisTiles.extend({
     canvas.height = size.y;
     const image = new Image();
     image.crossOrigin = 'anonymous';
-    image.onload = () => {
-      const context = canvas.getContext('2d', { willReadFrequently: true });
-      context.drawImage(image, 0, 0);
-      const pixels = context.getImageData(0, 0, size.x, size.y);
-      const { data } = pixels;
-      for (let i = 0; i < data.length; i += 4) {
-        if (data[i] > WHITE && data[i + 1] > WHITE && data[i + 2] > WHITE) data[i + 3] = 0;
-      }
-      context.putImageData(pixels, 0, 0);
-      done(null, canvas);
+    let timer;
+    let settled = false;
+    const finish = (error, cancelled = false) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      image.onload = null;
+      image.onerror = null;
+      this.pendingTiles.delete(canvas);
+      if (cancelled) image.src = 'data:,';
+      else done(error, canvas);
     };
-    const load = () => { image.src = this.getTileUrl(coords); };
+    this.pendingTiles.set(canvas, () => finish(null, true));
+    image.onload = () => {
+      if (settled) return;
+      try {
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        context.drawImage(image, 0, 0);
+        const pixels = context.getImageData(0, 0, size.x, size.y);
+        const { data } = pixels;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i] > WHITE && data[i + 1] > WHITE && data[i + 2] > WHITE) data[i + 3] = 0;
+        }
+        context.putImageData(pixels, 0, 0);
+      } catch (error) {
+        finish(error);
+        return;
+      }
+      finish(null);
+    };
+    const load = () => { if (!settled) image.src = this.getTileUrl(coords); };
     let retried = false;
     image.onerror = (error) => {
       if (retried) {
-        done(error, canvas);
+        finish(error);
       } else {
         retried = true;
-        setTimeout(load, TILE_RETRY_MS);
+        timer = setTimeout(load, TILE_RETRY_MS);
       }
     };
     load();
@@ -272,9 +330,9 @@ export class ArcgisLayer extends TileLayerBase {
 }
 
 // NOAA ArcGIS services can describe their own color keys.
-export async function loadArcgisLegend(entry) {
+export async function loadArcgisLegend(entry, signal) {
   if (entry.image) return [];
-  const response = await fetch(`${NOAA_SERVICES}/${entry.service}/legend?f=json`, { signal: AbortSignal.timeout(20_000) });
+  const response = await fetch(`${NOAA_SERVICES}/${entry.service}/legend?f=json`, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20_000)]) : AbortSignal.timeout(20_000) });
   if (!response.ok) return [];
   const { layers = [] } = await response.json();
   const chosen = entry.show ? layers.filter((layer) => entry.show.includes(layer.layerId)) : layers;
@@ -300,6 +358,7 @@ export class RainViewerLayer {
     this.path = null;
     this.maps = null;
     this.loop = null;
+    this.pendingFrame = null;
     this.stopOnMove = () => this.stopLoopPlayback();
   }
 
@@ -313,6 +372,7 @@ export class RainViewerLayer {
     this.active = false;
     this.stopLoopPlayback();
     this.stopLoop?.();
+    this.cancelPendingFrame();
     if (this.frame) this.map.removeLayer(this.frame);
     this.frame = null;
     this.path = null;
@@ -337,7 +397,7 @@ export class RainViewerLayer {
 
   async check() {
     try {
-      const response = await fetch(RAINVIEWER_MAPS, { signal: AbortSignal.timeout(20_000) });
+      const response = await fetch(RAINVIEWER_MAPS, { signal: requestSignal(this.map, 20_000) });
       if (!response.ok) throw new Error(`RainViewer returned ${response.status}`);
       this.maps = await response.json();
     } catch (error) {
@@ -355,17 +415,32 @@ export class RainViewerLayer {
   }
 
   showLatest() {
+    this.cancelPendingFrame();
+    if (!this.active) return;
     const next = this.tileLayer(this.path, 0);
-    next.once('load', () => setTimeout(() => {
-      if (!this.active) {
-        this.map.removeLayer(next);
-        return;
-      }
-      next.setOpacity(this.opacity);
-      if (this.frame && this.frame !== next) this.map.removeLayer(this.frame);
-      this.frame = next;
-    }));
+    const pending = { layer: next, timer: null, onLoad: null };
+    pending.onLoad = () => {
+      next.off('load', pending.onLoad);
+      pending.timer = setTimeout(() => {
+        if (this.pendingFrame !== pending || !this.active) return;
+        this.pendingFrame = null;
+        next.setOpacity(this.loop ? 0 : this.opacity);
+        if (this.frame && this.frame !== next) this.map.removeLayer(this.frame);
+        this.frame = next;
+      });
+    };
+    this.pendingFrame = pending;
+    next.on('load', pending.onLoad);
     next.addTo(this.map);
+  }
+
+  cancelPendingFrame() {
+    const pending = this.pendingFrame;
+    if (!pending) return;
+    this.pendingFrame = null;
+    clearTimeout(pending.timer);
+    pending.layer.off('load', pending.onLoad);
+    this.map.removeLayer(pending.layer);
   }
 
   get isPlaying() {
@@ -377,6 +452,7 @@ export class RainViewerLayer {
     if (this.loop || !this.maps || !this.active) return;
     const past = this.maps.radar.past;
     const chosen = past.filter((_, index) => (past.length - 1 - index) % 2 === 0);
+    if (chosen.length === 0) return;
     const frames = chosen.map(({ path, time }) => ({ time: time * 1000, layer: this.tileLayer(path, 0).addTo(this.map) }));
     if (this.frame) this.frame.setOpacity(0);
     let index = -1;

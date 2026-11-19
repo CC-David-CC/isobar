@@ -1,3 +1,4 @@
+import { L } from './libraries.js';
 // Moving lines that follow a vector field: wind, or ocean currents. The lines move through one
 // forecast time and are sped up so they can be seen. leaflet-velocity draws them.
 import { fromDegrees, sampleGrid } from './grid-math.js';

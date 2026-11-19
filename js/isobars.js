@@ -1,3 +1,4 @@
+import { L } from './libraries.js';
 // Lines of equal pressure with H and L marks, drawn from the forecast pressure field.
 import { repeatWhileVisible } from './schedule.js';
 

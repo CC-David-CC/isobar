@@ -1,3 +1,5 @@
+import { L } from './libraries.js';
+import { requestSignal } from './lifetime.js';
 // A map layer made of images from a NOAA map service, kept current on its own.
 // Many layers cover several separate areas (the lower 48, Alaska, Hawaii...). Each area is a
 // "part" that only asks for data while it is on screen.
@@ -22,6 +24,7 @@ class Part {
     this.status = { state: 'loading' };
     this.frame = null;
     this.pending = null;
+    this.cancelPending = null;
     this.time = null;
     this.token = 0;
     this.stopLoop = null;
@@ -46,7 +49,7 @@ class Part {
     this.pause();
     this.token += 1;
     const { map } = this.owner;
-    if (this.pending) map.removeLayer(this.pending);
+    this.cancelPending?.();
     if (this.frame) map.removeLayer(this.frame);
     this.pending = null;
     this.frame = null;
@@ -59,7 +62,7 @@ class Part {
     const token = ++this.token;
     const lastData = this.time ? Date.parse(this.time) : undefined;
     try {
-      const time = spec.capabilitiesUrl ? await fetchLatestTime(spec.capabilitiesUrl, spec.layer) : null;
+      const time = spec.capabilitiesUrl ? await fetchLatestTime(spec.capabilitiesUrl, spec.layer, { signal: owner.map.isobarSignal }) : null;
       if (token !== this.token) return;
       if (!this.frame || !spec.capabilitiesUrl || time !== this.time) {
         await this.showFrame(time, token);
@@ -81,19 +84,33 @@ class Part {
   // Loads the new image set out of sight and swaps it in once ready, so the layer never blinks.
   showFrame(time, token) {
     const { map, options } = this.owner;
+    this.cancelPending?.();
     return new Promise((resolve, reject) => {
       const next = this.owner.makeFrame(this.spec, time, this.zIndex);
       let loaded = 0;
       let failed = 0;
       let settled = false;
-      next.on('tileload', () => { loaded += 1; });
-      next.on('tileerror', () => { failed += 1; });
-      const settle = () => {
+      let timer;
+      let deferred;
+      const onTileLoad = () => { loaded += 1; };
+      const onTileError = () => { failed += 1; };
+      const onLoad = () => {
+        clearTimeout(deferred);
+        deferred = setTimeout(() => settle(false));
+      };
+      const settle = (cancelled = false) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        this.pending = null;
-        if (token !== this.token) {
+        clearTimeout(deferred);
+        next.off('tileload', onTileLoad);
+        next.off('tileerror', onTileError);
+        next.off('load', onLoad);
+        if (this.pending === next) {
+          this.pending = null;
+          this.cancelPending = null;
+        }
+        if (cancelled || token !== this.token) {
           map.removeLayer(next);
           resolve();
           return;
@@ -108,10 +125,13 @@ class Part {
         this.frame = next;
         resolve();
       };
-      const timer = setTimeout(settle, FRAME_TIMEOUT_MS);
+      timer = setTimeout(() => settle(false), FRAME_TIMEOUT_MS);
       // Leaflet still uses the layer right after firing 'load', so it can't be removed during it.
-      next.on('load', () => setTimeout(settle));
+      next.on('tileload', onTileLoad);
+      next.on('tileerror', onTileError);
+      next.on('load', onLoad);
       this.pending = next;
+      this.cancelPending = () => settle(true);
       next.addTo(map);
     });
   }

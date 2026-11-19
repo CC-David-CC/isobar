@@ -1,3 +1,5 @@
+import { requestSignal } from './lifetime.js';
+import { L } from './libraries.js';
 // Layers of things at places: tropical cyclones, airport weather reports and natural events.
 import { el } from './dom.js';
 import { boxTouchesView } from './geo.js';
@@ -38,13 +40,14 @@ export class CycloneLayer {
 
   async refresh() {
     try {
-      const response = await fetch(GDACS_LIST, { signal: AbortSignal.timeout(30_000) });
+      const response = await fetch(GDACS_LIST, { signal: requestSignal(this.map, 30_000) });
       if (!response.ok) throw new Error(`GDACS returned ${response.status}`);
       const { features = [] } = await response.json();
+      if (!this.active) return;
       const current = features.filter((feature) => String(feature.properties.iscurrent).toLowerCase() === 'true');
       // GDACS guards its shapes with a bot check that some browsers, Safari among them, can't pass
       // from a page. The storms still show then, just without their tracks.
-      const paths = await Promise.all(current.map((storm) => fetch(storm.properties.url.geometry, { signal: AbortSignal.timeout(30_000) })
+      const paths = await Promise.all(current.map((storm) => fetch(storm.properties.url.geometry, { signal: requestSignal(this.map, 30_000) })
         .then((reply) => (reply.ok ? reply.json() : null))
         .catch(() => null)));
       if (!this.active) return;
@@ -173,7 +176,7 @@ export class AirportLayer {
 
   async ensureNetworks() {
     if (this.networks) return;
-    const response = await fetch(`${IEM}/geojson/networks.geojson`, { signal: AbortSignal.timeout(30_000) });
+    const response = await fetch(`${IEM}/geojson/networks.geojson`, { signal: requestSignal(this.map, 30_000) });
     if (!response.ok) throw new Error(`IEM returned ${response.status}`);
     const { features } = await response.json();
     this.networks = features.filter((feature) => /_ASOS$/.test(feature.id) && feature.geometry).map((feature) => {
@@ -188,6 +191,7 @@ export class AirportLayer {
     if (!this.active) return;
     try {
       await this.ensureNetworks();
+      if (!this.active) return;
       if (this.map.getZoom() < MIN_ZOOM) {
         this.onStatus({ state: 'outside', message: 'Zoom in to see airports.' });
         return;
@@ -201,7 +205,7 @@ export class AirportLayer {
       const stale = Date.now() - 10 * 60_000;
       const wanted = visible.filter((network) => (this.loaded.get(network.id)?.at ?? 0) < stale).slice(0, MAX_NETWORKS);
       await Promise.all(wanted.map(async (network) => {
-        const response = await fetch(`${IEM}/api/1/currents.geojson?network=${network.id}`, { signal: AbortSignal.timeout(30_000) });
+        const response = await fetch(`${IEM}/api/1/currents.geojson?network=${network.id}`, { signal: requestSignal(this.map, 30_000) });
         if (!response.ok) throw new Error(`IEM returned ${response.status}`);
         const { features = [] } = await response.json();
         this.loaded.set(network.id, { at: Date.now(), features });
@@ -297,7 +301,7 @@ export class EventLayer {
 
   async refresh() {
     try {
-      const response = await fetch(EONET, { signal: AbortSignal.timeout(30_000) });
+      const response = await fetch(EONET, { signal: requestSignal(this.map, 30_000) });
       if (!response.ok) throw new Error(`NASA returned ${response.status}`);
       const { events = [] } = await response.json();
       if (!this.active) return;

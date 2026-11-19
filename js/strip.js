@@ -6,10 +6,12 @@ import { drawMeteogram } from './meteogram.js';
 import { loadComparison, loadSection, renderComparison, renderSection } from './point-data.js';
 import { describeWind, fullTemp, shortTemp } from './units.js';
 
-const byId = (id) => document.getElementById(id);
 
 export class ForecastStrip {
-  constructor(root, { getSystem, getMapValue, onOpened, onClosed, isSaved, onToggleSaved }) {
+  constructor(root, { surface, getSystem, getMapValue, onOpened, onClosed, isSaved, onToggleSaved }) {
+    const scope = root.getRootNode();
+    const byId = (id) => scope.getElementById(id);
+    this.surface = surface;
     Object.assign(this, { root, getSystem, getMapValue, onOpened, onClosed, isSaved, onToggleSaved });
     this.tab = 'forecast';
     this.tabData = new Map();
@@ -18,7 +20,7 @@ export class ForecastStrip {
     this.copyButton = byId('strip-copy');
     this.tabPanel = byId('strip-tab-panel');
     this.forecastPanel = byId('strip-forecast');
-    this.tabButtons = [...document.querySelectorAll('[data-tab]')];
+    this.tabButtons = [...root.querySelectorAll('[data-tab]')];
     for (const button of this.tabButtons) button.addEventListener('click', () => this.setTab(button.dataset.tab));
     this.saveButton.addEventListener('click', () => {
       this.onToggleSaved(this.placeInfo());
@@ -38,17 +40,19 @@ export class ForecastStrip {
     this.source = byId('strip-source');
     byId('strip-close').addEventListener('click', () => this.close());
 
-    new ResizeObserver(() => {
+    this.observer = new ResizeObserver(() => {
+      if (this.disposed) return;
       this.publishHeight();
       this.drawChart();
-    }).observe(this.root);
+    });
+    this.observer.observe(this.root);
   }
 
   // The map's own controls sit above the strip, so the page needs to know how tall it is.
   publishHeight() {
     const height = this.root.hidden ? 0 : this.root.offsetHeight;
-    document.documentElement.style.setProperty('--strip-height', `${height}px`);
-    document.body.classList.toggle('strip-open', height > 0);
+    this.surface.style.setProperty('--strip-height', `${height}px`);
+    this.surface.classList.toggle('strip-open', height > 0);
   }
 
   get isOpen() {
@@ -74,11 +78,14 @@ export class ForecastStrip {
     const text = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     try {
       await navigator.clipboard.writeText(text);
+      if (this.disposed) return;
       this.copyButton.textContent = 'Copied';
     } catch {
       this.copyButton.textContent = text;
     }
-    setTimeout(() => { this.copyButton.textContent = 'Copy coordinates'; }, 2500);
+    if (this.disposed) return;
+    clearTimeout(this.copyTimer);
+    this.copyTimer = setTimeout(() => { this.copyButton.textContent = 'Copy coordinates'; }, 2500);
   }
 
   setTab(tab) {
@@ -167,6 +174,16 @@ export class ForecastStrip {
     this.root.classList.remove('rising');
     this.publishHeight();
     this.onClosed?.();
+  }
+
+  dispose() {
+    this.disposed = true;
+    this.request?.abort();
+    this.request = null;
+    this.point = null;
+    this.observer.disconnect();
+    clearTimeout(this.copyTimer);
+    this.tabData.clear();
   }
 
   // Called when the temperature and speed units change.

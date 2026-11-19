@@ -1,3 +1,4 @@
+import { L } from './libraries.js';
 // Colors the map from a forecast field, and answers "what's the value here?".
 import { sourceFor, usesFallback } from './catalog/fields.js';
 import { paintTile } from './field-paint.js';

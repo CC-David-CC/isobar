@@ -1,3 +1,4 @@
+import { L } from './libraries.js';
 import { AlertsLayer } from './alerts-layer.js';
 import { addBasemap, canDrawBasemap } from './basemap.js';
 import { FIELDS, FLOW_LEVELS } from './catalog/fields.js';
@@ -27,12 +28,20 @@ import { Timeline } from './timeline.js';
 import { defaultSystem, describeWind, formatValue, fullSpeed, SYSTEMS } from './units.js';
 import { WmsLayer } from './wms-layer.js';
 
+import { Lifetime } from './lifetime.js';
+
+export function startIsobar(root, surface) {
 const STATUS_TICK_MS = 30_000;
 const DEFAULT_FILL_OPACITY = 0.72;
-const byId = (id) => document.getElementById(id);
+const byId = (id) => root.getElementById(id);
+const lifetime = new Lifetime();
+const alive = () => !lifetime.disposed;
+try {
 
 // ---- Map ----
-const map = L.map('map', { zoomControl: false, minZoom: 2, maxZoom: 11, worldCopyJump: true });
+const map = L.map(byId('map'), { zoomControl: false, minZoom: 2, maxZoom: 11, worldCopyJump: true });
+map.isobarSignal = lifetime.signal;
+lifetime.add(() => map.remove());
 const opening = openingView(Intl.DateTimeFormat().resolvedOptions().timeZone, -new Date().getTimezoneOffset());
 if (opening.bounds) map.fitBounds(opening.bounds, { animate: false });
 else map.setView(opening.center, opening.zoom, { animate: false });
@@ -47,24 +56,31 @@ PANE_ORDER.forEach((name, index) => {
 // Keeps the time bar and legend clear of the map credits, which grow with the layers that are on.
 // Whichever kind of map is showing owns the credits, and the hidden one measures zero.
 const creditWatcher = new ResizeObserver(([{ target }]) => {
-  if (target.offsetHeight > 0) document.documentElement.style.setProperty('--credit-height', `${target.offsetHeight}px`);
+  if (target.offsetHeight > 0) surface.style.setProperty('--credit-height', `${target.offsetHeight}px`);
 });
 creditWatcher.observe(map.attributionControl.getContainer());
+lifetime.add(() => creditWatcher.disconnect());
 
 const notice = byId('notice');
 const baseMapMessages = {
   onUnavailable: () => {
+    if (!alive()) return;
     notice.textContent = "The base map didn't fully load. Weather layers still work.";
     notice.hidden = false;
   },
   onSlow: () => {
+    if (!alive()) return;
     notice.textContent = 'The base map is slow to load. Weather layers still work.';
     notice.hidden = false;
   },
-  onLoaded: () => { notice.hidden = true; },
+  onLoaded: () => { if (alive()) notice.hidden = true; },
 };
 let flatBasemap = null;
-const startFlatBasemap = () => { flatBasemap = addBasemap(map, { labelsPane: 'labels', ...baseMapMessages }); };
+const startFlatBasemap = () => {
+  if (!alive()) return;
+  flatBasemap = addBasemap(map, { labelsPane: 'labels', ...baseMapMessages });
+};
+lifetime.add(() => { flatBasemap?.then((basemap) => basemap?.remove()); flatBasemap = null; });
 
 // ---- Preferences ----
 const savedUnits = load('units');
@@ -81,18 +97,21 @@ let fillOpacity = load('fillOpacity') ?? DEFAULT_FILL_OPACITY;
 
 // ---- Time ----
 const service = new GridService();
+lifetime.add(() => service.dispose());
 let fill = null;
 let fillId = null;
 const timeline = new Timeline(byId('timeline'), {
+  surface,
   onChange: () => updateTimedLayers(),
   isBusy: () => service.inFlight.size > 0,
 });
+lifetime.add(() => timeline.dispose());
 const getTime = () => timeline.time();
 const getModel = () => model;
 
 // ---- Overlays ----
 let panel = null;
-const statusFor = (id) => (status) => panel?.setStatus(id, status);
+const statusFor = (id) => (status) => { if (alive()) panel?.setStatus(id, status); };
 const link = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
 
 const stormBox = el('div', { class: 'storm-list' });
@@ -218,6 +237,7 @@ let viewMode = 'flat';
 let layerKinds = FLAT_LAYERS;
 let layerTarget = map;
 let controllers = makeControllers(layerTarget, layerKinds);
+for (const id of enabled) if (!Object.hasOwn(controllers, id)) enabled.delete(id);
 
 // ---- Color the map: one at a time ----
 const fieldCredit = `Forecasts: ${link('https://www.nco.ncep.noaa.gov/', 'NOAA')}, ${link('https://www.ecmwf.int/en/forecasts/datasets/open-data', 'ECMWF')}`;
@@ -292,6 +312,7 @@ function updateTimedLayers() {
 }
 
 panel = new Panel({
+  root, surface, signal: lifetime.signal,
   overlays: overlayDefinitions,
   groups: FIELD_GROUPS,
   fills,
@@ -316,9 +337,10 @@ panel = new Panel({
 panel.setModel(model);
 
 // Keep the "2 min old" labels moving between data updates.
-setInterval(() => {
+const statusTimer = setInterval(() => {
   if (!document.hidden) panel.refreshStatuses();
 }, STATUS_TICK_MS);
+lifetime.add(() => clearInterval(statusTimer));
 
 // ---- Forecast strip ----
 let spot = null;
@@ -328,7 +350,7 @@ const hint = byId('hint');
 const keepSpotInView = () => {
   if (!spot || !followSpot) return;
   const stripHeight = byId('strip').offsetHeight;
-  const railHeight = matchMedia('(max-width: 640px)').matches ? byId('rail').offsetHeight : 0;
+  const railHeight = surface.clientWidth <= 640 ? byId('rail').offsetHeight : 0;
   view.keepSpotInView(spot.lat, spot.lng, { top: railHeight, bottom: stripHeight });
 };
 
@@ -343,6 +365,7 @@ function mapValueAt(lat, lng) {
 
 let search = null;
 const strip = new ForecastStrip(byId('strip'), {
+  surface,
   getSystem: () => system,
   getMapValue: mapValueAt,
   onOpened: keepSpotInView,
@@ -355,7 +378,10 @@ const strip = new ForecastStrip(byId('strip'), {
   onToggleSaved: (place) => search.toggleSaved(place),
 });
 
+lifetime.add(() => strip.dispose());
+
 function openForecast(where, name) {
+  if (!alive()) return;
   const point = { lat: where.lat, lng: wrapLongitude(where.lng), name };
   spot = { lat: where.lat, lng: where.lng };
   view.setSpot(spot.lat, spot.lng);
@@ -407,15 +433,18 @@ map.on('dragstart', () => { followSpot = false; });
 map.on('click', (event) => onMapClick(event.latlng));
 // Keyboard users can pan with the arrow keys and press Enter for the spot at the map's center.
 map.on('keypress', ({ originalEvent }) => {
-  if (originalEvent.key === 'Enter' && document.activeElement === map.getContainer()) openForecast(map.getCenter());
+  if (originalEvent.key === 'Enter' && root.activeElement === map.getContainer()) openForecast(map.getCenter());
 });
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && strip.isOpen && !byId('about').open) strip.close();
-});
+root.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (byId('about').open) { byId('about').close(); byId('about-open').focus(); }
+  else if (strip.isOpen) strip.close();
+}, { signal: lifetime.signal });
 hint.hidden = load('hintDismissed', false);
 
 // ---- Finding a place ----
 search = new PlaceSearch({
+  root,
   input: byId('place-input'),
   list: byId('place-results'),
   onPick: (place) => {
@@ -425,10 +454,15 @@ search = new PlaceSearch({
   },
 });
 
+lifetime.add(() => search.dispose());
+let noticeTimer;
+lifetime.add(() => clearTimeout(noticeTimer));
 const showNotice = (text) => {
+  if (!alive()) return;
   notice.textContent = text;
   notice.hidden = false;
-  setTimeout(() => { notice.hidden = true; }, 6000);
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { notice.hidden = true; }, 6000);
 };
 
 byId('locate').addEventListener('click', () => {
@@ -438,6 +472,7 @@ byId('locate').addEventListener('click', () => {
   }
   navigator.geolocation.getCurrentPosition(
     ({ coords }) => {
+      if (!alive()) return;
       view.goTo(coords.latitude, coords.longitude, 8);
       openForecast({ lat: coords.latitude, lng: coords.longitude });
     },
@@ -450,6 +485,8 @@ byId('locate').addEventListener('click', () => {
 const readout = byId('readout');
 let pointer = null;
 let readoutQueued = false;
+let readoutFrame;
+lifetime.add(() => cancelAnimationFrame(readoutFrame));
 
 function refreshReadout() {
   if (!pointer) {
@@ -478,7 +515,8 @@ const onPointerMoved = (where) => {
   }
   if (readoutQueued) return;
   readoutQueued = true;
-  requestAnimationFrame(() => {
+  readoutFrame = requestAnimationFrame(() => {
+    if (!alive()) return;
     readoutQueued = false;
     refreshReadout();
   });
@@ -487,7 +525,7 @@ map.on('mousemove', ({ latlng }) => onPointerMoved(latlng));
 map.on('mouseout', () => onPointerMoved(null));
 
 // ---- Units ----
-const unitButtons = [...document.querySelectorAll('[data-units]')];
+const unitButtons = [...root.querySelectorAll('[data-units]')];
 const applyUnits = () => {
   for (const button of unitButtons) {
     button.setAttribute('aria-pressed', String(button.dataset.units === system));
@@ -507,7 +545,7 @@ for (const button of unitButtons) {
 applyUnits();
 
 // ---- About ----
-byId('about-open').addEventListener('click', () => byId('about').showModal());
+byId('about-open').addEventListener('click', () => byId('about').show());
 byId('about-close').addEventListener('click', () => byId('about').close());
 byId('layer-count').textContent = String(fills.length + overlayDefinitions.length);
 
@@ -516,17 +554,18 @@ const flatContainer = byId('map');
 const globeContainer = byId('globe');
 const viewToggle = byId('view-toggle');
 let globe = null;
+lifetime.add(() => { globe?.remove(); globe = null; });
 
 const openGlobe = (lat, lng) => {
   // On a phone the panel sits across the top and folds away, so the Earth stays centered.
-  const onPhone = matchMedia('(max-width: 640px)').matches;
-  const left = onPhone ? 0 : byId('rail').getBoundingClientRect().right;
+  const onPhone = surface.clientWidth <= 640;
+  const left = onPhone ? 0 : byId('rail').offsetLeft + byId('rail').offsetWidth;
   return GlobeMap.create(globeContainer, {
     lat,
     lng,
-    zoom: fitGlobeZoom(innerWidth - left, innerHeight, lat),
+    zoom: fitGlobeZoom(surface.clientWidth - left, surface.clientHeight, lat),
     clearOf: { left },
-  }, globeCallbacks);
+  }, { ...globeCallbacks, signal: lifetime.signal });
 };
 
 const globeCallbacks = {
@@ -543,6 +582,7 @@ const showToggle = () => {
 
 // Each kind of map holds a lot of memory, which matters most on phones, so only one exists at a time.
 function useGlobe(next) {
+  next.isobarSignal = lifetime.signal;
   globe = next;
   flatContainer.hidden = true;
   flatBasemap?.then((basemap) => basemap?.remove());
@@ -583,6 +623,21 @@ function stopAllLayers() {
   readout.hidden = true;
 }
 
+lifetime.add(stopAllLayers);
+
+const resize = new ResizeObserver(() => {
+  if (!alive() || !surface.clientWidth || !surface.clientHeight) return;
+  if (globe) {
+    const left = surface.clientWidth <= 640 ? 0 : byId('rail').offsetLeft + byId('rail').offsetWidth;
+    globe.clearOf.left = left;
+    globe.map.setPadding(globe.clearOf);
+    globe.map.resize();
+  } else map.invalidateSize({ animate: false });
+  keepSpotInView();
+});
+resize.observe(surface);
+lifetime.add(() => resize.disconnect());
+
 function startAllLayers() {
   controllers = makeControllers(layerTarget, layerKinds);
   for (const id of enabled) controllers[id].start();
@@ -596,12 +651,13 @@ function startAllLayers() {
 }
 
 async function switchView(mode) {
-  if (mode === viewMode) return;
+  if (!alive() || mode === viewMode || viewToggle.disabled) return;
   viewToggle.disabled = true;
   const { lat, lng, zoom } = view.position();
   try {
     if (mode === 'globe') {
       const next = await openGlobe(lat, lng);
+      if (!alive()) { next.remove(); return; }
       stopAllLayers();
       useGlobe(next);
     } else {
@@ -611,7 +667,9 @@ async function switchView(mode) {
     save('view', viewMode);
     startAllLayers();
   } catch {
+    if (!alive()) return;
     globeContainer.hidden = true;
+    if (viewMode === 'flat' && !flatBasemap) startFlatBasemap();
     showNotice("Can't load the globe right now. The flat map still works.");
   }
   viewToggle.disabled = false;
@@ -624,22 +682,8 @@ if (canDrawBasemap()) {
 }
 
 // ---- Start whatever was on last time ----
-// The globe is where visitors land, unless they last chose the flat map.
-let openedOnGlobe = false;
-if (load('view') !== 'flat' && canDrawBasemap()) {
-  const { lat, lng } = map.getCenter();
-  try {
-    useGlobe(await openGlobe(lat, lng));
-    controllers = makeControllers(layerTarget, layerKinds);
-    openedOnGlobe = true;
-  } catch {
-    globeContainer.hidden = true;
-    flatContainer.hidden = false;
-  }
-}
-if (!openedOnGlobe) startFlatBasemap();
-showToggle();
-
+// Start in one well-defined mode, then use the same transition as the view button.
+// This also handles clicks made while the initial globe style is still downloading.
 const remembered = new Set(enabled);
 enabled.clear();
 for (const { id } of overlayDefinitions) {
@@ -649,3 +693,13 @@ const savedFill = load('fill');
 if (savedFill && fillById.has(savedFill)) setFill(savedFill);
 else panel.setActiveFill(null, {});
 refreshTimelineVisibility();
+showToggle();
+if (load('view') !== 'flat' && canDrawBasemap()) switchView('globe');
+else startFlatBasemap();
+
+return () => lifetime.dispose();
+} catch (error) {
+  lifetime.dispose();
+  throw error;
+}
+}

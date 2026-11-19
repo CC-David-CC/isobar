@@ -12,8 +12,8 @@ export function latestTimeIn(xml, layerName) {
   return value[1];
 }
 
-export async function fetchLatestTime(url, layerName, { fetchImpl = fetch, timeoutMs = 20_000 } = {}) {
-  const response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+export async function fetchLatestTime(url, layerName, { fetchImpl = fetch, timeoutMs = 20_000, signal } = {}) {
+  const response = await fetchImpl(url, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) });
   if (!response.ok) throw new Error(`Map service returned ${response.status}`);
   return latestTimeIn(await response.text(), layerName);
 }

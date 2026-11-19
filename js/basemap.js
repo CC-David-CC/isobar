@@ -1,3 +1,5 @@
+import { requestSignal } from './lifetime.js';
+import { L } from './libraries.js';
 // The base map is OpenFreeMap's blue "fiord" style, adapted in four ways. A layer missing from
 // these tables or the style is simply skipped, so a change on their side can't break the map.
 import { BASEMAP_ATTRIBUTION, BASEMAP_STYLE } from './config.js';
@@ -110,7 +112,10 @@ const SLOW_MS = 8_000;
 
 export const canDrawBasemap = () => {
   const canvas = document.createElement('canvas');
-  return Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl'));
+  const context = canvas.getContext('webgl2') || canvas.getContext('webgl');
+  const available = Boolean(context);
+  context?.getExtension('WEBGL_lose_context')?.loseContext();
+  return available;
 };
 
 export async function addBasemap(map, { labelsPane, onUnavailable, onSlow, onLoaded }) {
@@ -120,9 +125,10 @@ export async function addBasemap(map, { labelsPane, onUnavailable, onSlow, onLoa
     return null;
   }
   try {
-    const response = await fetch(BASEMAP_STYLE, { signal: AbortSignal.timeout(STYLE_TIMEOUT_MS) });
+    const response = await fetch(BASEMAP_STYLE, { signal: requestSignal(map, STYLE_TIMEOUT_MS) });
     if (!response.ok) throw new Error(`Base map style returned ${response.status}`);
     const { ground, labels } = splitStyle(adaptStyle(await response.json()));
+    if (map.isobarSignal?.aborted) return null;
     // The credit goes up with the map, rather than when its first tiles finish.
     const groundLayer = L.maplibreGL({ style: ground, attributionControl: { customAttribution: BASEMAP_ATTRIBUTION } }).addTo(map);
     const labelsLayer = L.maplibreGL({ style: labels, pane: labelsPane, attributionControl: false }).addTo(map);
@@ -160,7 +166,7 @@ export async function addBasemap(map, { labelsPane, onUnavailable, onSlow, onLoa
       },
     };
   } catch {
-    onUnavailable();
+    if (!map.isobarSignal?.aborted) onUnavailable();
     return null;
   }
 }

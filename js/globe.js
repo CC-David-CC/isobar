@@ -1,3 +1,4 @@
+import { maplibregl } from './libraries.js';
 // The optional 3D globe. Layers written for the flat map also run here. They ask the map for a small
 // part of Leaflet's interface, and this file provides that part on top of MapLibre's globe view. Only
 // their drawing differs, and that lives in globe-layers.js.
@@ -26,13 +27,18 @@ const FIELD_SCHEME = 'isobar-field';
 const EMPTY_TILE = encodePng(new Uint8Array(4), 1, 1);
 const WHITE = 245;
 
-const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+const wait = (ms, signal) => new Promise((resolve, reject) => {
+  if (signal?.aborted) { reject(signal.reason); return; }
+  const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, ms);
+  const abort = () => { clearTimeout(timer); reject(signal.reason); };
+  signal?.addEventListener('abort', abort, { once: true });
+});
 
 async function fetchTile(url, signal) {
   const address = url.replace(/^[a-z-]+:/, 'https:');
   let failure;
   for (let attempt = 0; attempt < 2; attempt++) {
-    if (attempt > 0) await wait(TILE_RETRY_MS);
+    if (attempt > 0) await wait(TILE_RETRY_MS, signal);
     try {
       const response = await fetch(address, { signal });
       if (response.ok) return await response.arrayBuffer();
@@ -319,9 +325,11 @@ export class GlobeMarkers {
 export class GlobeMap {
   // Fetches the map style first, so a failure here leaves the flat map untouched.
   static async create(container, position, callbacks) {
-    const response = await fetch(BASEMAP_STYLE, { signal: AbortSignal.timeout(STYLE_TIMEOUT_MS) });
+    const signal = callbacks.signal ? AbortSignal.any([callbacks.signal, AbortSignal.timeout(STYLE_TIMEOUT_MS)]) : AbortSignal.timeout(STYLE_TIMEOUT_MS);
+    const response = await fetch(BASEMAP_STYLE, { signal });
     if (!response.ok) throw new Error(`Base map style returned ${response.status}`);
     const style = globeStyle(adaptStyle(await response.json()));
+    signal.throwIfAborted();
     return new GlobeMap(container, style, position, callbacks);
   }
 
@@ -424,7 +432,7 @@ export class GlobeMap {
     });
     let pointerQueued = null;
     map.on('mousemove', (event) => {
-      if (pointerQueued === null) requestAnimationFrame(() => {
+      if (pointerQueued === null) this.pointerFrame = requestAnimationFrame(() => {
         const { point, lngLat } = pointerQueued;
         pointerQueued = null;
         if (!this.alive) return;
@@ -573,6 +581,11 @@ export class GlobeMap {
   remove() {
     this.alive = false;
     this.stopSlowTimer();
+    cancelAnimationFrame(this.pointerFrame);
+    this.queue.length = 0;
+    this.tileOwners.clear();
+    this.clickable.clear();
+    this.clearSpot();
     this.closePopup();
     this.map.remove();
     this.container.replaceChildren();

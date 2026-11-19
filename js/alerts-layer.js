@@ -1,3 +1,5 @@
+import { requestSignal } from './lifetime.js';
+import { L } from './libraries.js';
 // Alerts come from two places. NOAA's alert map shows every active watch and warning, including
 // the county-wide ones that have no shape of their own in the alert feed. Fast-moving storm
 // warnings are also fetched directly and drawn on top, because they matter most and change fastest.
@@ -64,7 +66,7 @@ export class AlertsLayer {
   async loadStorms() {
     if (this.mapStatus.state === 'outside') return;
     try {
-      const response = await fetch(stormUrl(), { signal: AbortSignal.timeout(20_000) });
+      const response = await fetch(stormUrl(), { signal: requestSignal(this.map, 20_000) });
       if (!response.ok) throw new Error(`Alert feed returned ${response.status}`);
       const { features } = await response.json();
       if (!this.active) return;

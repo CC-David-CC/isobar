@@ -1,12 +1,9 @@
 /* jshint esversion: 6, -W008, -W030, -W083 */
 // Generated from src/leaflet-maplibre-gl.mjs. Run `npm run build` to update.
-(function(global, factory) {
-	typeof exports === "object" && typeof module !== "undefined" ? factory(exports, require("leaflet"), require("maplibre-gl")) : typeof define === "function" && define.amd ? define([
-		"exports",
-		"leaflet",
-		"maplibre-gl"
-	], factory) : (global = typeof globalThis !== "undefined" ? globalThis : global || self, factory(global.MaplibreGLLeaflet = {}, global.L, global.maplibregl));
-})(this, function(exports, leaflet, maplibre_gl) {
+import leaflet from '../leaflet/leaflet.js';
+import maplibre_gl from '../maplibre-gl/maplibre-gl.js';
+const exports = {};
+(function(exports, leaflet, maplibre_gl) {
 	Object.defineProperty(exports, "__esModule", { value: true });
 	//#region \0rolldown/runtime.js
 	var __create = Object.create;
@@ -231,4 +228,5 @@
 	exports.MaplibreGL = MaplibreGL;
 	exports.default = maplibreGL;
 	exports.maplibreGL = maplibreGL;
-});
+})(exports, leaflet, maplibre_gl);
+export default exports.default;

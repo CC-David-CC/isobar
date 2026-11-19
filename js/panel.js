@@ -5,10 +5,13 @@ import { describeStatus } from './status.js';
 import { formatNumber, unitLabel } from './units.js';
 import { gibsLegendUrl, loadArcgisLegend } from './image-layers.js';
 
-const byId = (id) => document.getElementById(id);
 
 export class Panel {
-  constructor({ overlays, groups, fills, models, getSystem, onOverlay, onFill, onClearFill, onOpacity, onModel, pinned, onPinned }) {
+  constructor({ root, surface, signal, overlays, groups, fills, models, getSystem, onOverlay, onFill, onClearFill, onOpacity, onModel, pinned, onPinned }) {
+    this.byId = (id) => root.getElementById(id);
+    this.surface = surface;
+    this.signal = signal;
+    const byId = this.byId;
     Object.assign(this, { overlays, groups, fills, getSystem, onOverlay, onFill, onClearFill, onOpacity, onPinned });
     this.pinned = new Set(pinned);
     this.rows = new Map();
@@ -32,7 +35,7 @@ export class Panel {
     this.modelSelect = select;
 
     byId('layers-toggle').addEventListener('click', () => {
-      const open = document.body.classList.toggle('layers-open');
+      const open = this.surface.classList.toggle('layers-open');
       byId('layers-toggle').setAttribute('aria-expanded', String(open));
     });
   }
@@ -42,8 +45,8 @@ export class Panel {
   }
 
   closeOnPhone() {
-    document.body.classList.remove('layers-open');
-    byId('layers-toggle').setAttribute('aria-expanded', 'false');
+    this.surface.classList.remove('layers-open');
+    this.byId('layers-toggle').setAttribute('aria-expanded', 'false');
   }
 
   addOverlayRow({ id, name, legend, hint, extras }) {
@@ -207,7 +210,7 @@ export class Panel {
     this.activeSupportsValues = supportsValues;
     this.markActiveFill();
     this.renderActive();
-    document.body.classList.toggle('has-fill', Boolean(entry));
+    this.surface.classList.toggle('has-fill', Boolean(entry));
   }
 
   renderActive() {
@@ -262,8 +265,8 @@ export class Panel {
     }
     if (entry.kind === 'arcgis') {
       const box = el('div', { class: 'legend-swatches' });
-      loadArcgisLegend(entry).then((rows) => {
-        if (this.activeFill !== entry) return;
+      loadArcgisLegend(entry, this.signal).then((rows) => {
+        if (this.signal?.aborted || this.activeFill !== entry) return;
         box.replaceChildren(...rows.map(({ label, image }) => el('span', { class: 'legend-category' }, el('img', { src: image, alt: '' }), label)));
       }).catch(() => {});
       return box;

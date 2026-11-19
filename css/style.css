@@ -1,18 +1,18 @@
 /* Isobar. Night-chart navy for the controls, recorder paper for the forecast, violet recorder ink. */
 @font-face {
-  font-family: "B612";
+  font-family: "Isobar B612";
   src: url("../vendor/fonts/b612-latin-400-normal.woff2") format("woff2");
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
-  font-family: "B612";
+  font-family: "Isobar B612";
   src: url("../vendor/fonts/b612-latin-700-normal.woff2") format("woff2");
   font-weight: 700;
   font-display: swap;
 }
 
-:root {
+:host {
   --night: #13233a;
   --night-glass: rgb(19 35 58 / 0.92);
   --night-line: #2c4562;
@@ -32,12 +32,12 @@
 
 * { box-sizing: border-box; }
 
-html, body {
+.isobar-root {
   height: 100%;
   margin: 0;
   background: var(--night);
   color: var(--snow);
-  font: 14px/1.45 "B612", system-ui, sans-serif;
+  font: 14px/1.45 "Isobar B612", system-ui, sans-serif;
 }
 
 h1, h2, h3, p, ul, ol, dl, dd { margin: 0; padding: 0; }
@@ -49,7 +49,7 @@ button { font: inherit; color: inherit; }
 #map:focus-visible { outline-offset: -4px; }
 
 #map {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: var(--night);
   font: inherit;
@@ -69,12 +69,12 @@ button { font: inherit; color: inherit; }
 
 /* Layer rail */
 #rail {
-  position: fixed;
+  position: absolute;
   z-index: 1000;
   top: 12px;
   left: 12px;
   width: 244px;
-  max-height: calc(100dvh - var(--strip-height) - 24px);
+  max-height: calc(100cqh - var(--strip-height) - 24px);
   padding: 8px 6px 6px;
   overflow-y: auto;
   background: var(--night-glass);
@@ -164,7 +164,7 @@ h1 { font-size: 21px; font-weight: 700; }
 
 /* Small messages on the map */
 #hint, #readout, #notice {
-  position: fixed;
+  position: absolute;
   z-index: 900;
   padding: 5px 10px;
   background: var(--night-glass);
@@ -223,12 +223,12 @@ h1 { font-size: 21px; font-weight: 700; }
 
 /* Forecast strip: a length of recorder paper pulled up over the map */
 #strip {
-  position: fixed;
+  position: absolute;
   z-index: 1100;
   right: 0;
   bottom: 0;
   left: 0;
-  max-height: 64vh;
+  max-height: 64cqh;
   padding: 12px 18px calc(10px + env(safe-area-inset-bottom));
   overflow-y: auto;
   background: var(--paper);
@@ -345,8 +345,8 @@ h2 { font-size: 21px; font-weight: 700; }
 
 /* About */
 #about {
-  width: min(560px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
+  width: min(560px, calc(100cqw - 32px));
+  max-height: calc(100cqh - 48px);
   padding: 20px 22px;
   background: var(--paper);
   color: var(--ink);
@@ -367,10 +367,10 @@ h2 { font-size: 21px; font-weight: 700; }
   border-radius: 3px;
   cursor: pointer;
 }
-#no-script { position: fixed; z-index: 2000; inset: 12px 12px auto; padding: 12px; background: var(--paper); color: var(--ink); }
+#no-script { position: absolute; z-index: 2000; inset: 12px 12px auto; padding: 12px; background: var(--paper); color: var(--ink); }
 
 /* Narrower screens: the days move under the chart */
-@media (max-width: 960px) {
+@container isobar (max-width: 960px) {
   .strip-grid { display: block; }
   #strip-days {
     display: grid;
@@ -381,7 +381,7 @@ h2 { font-size: 21px; font-weight: 700; }
 }
 
 /* Phones: the rail becomes a row across the top, and the strip scrolls */
-@media (max-width: 640px) {
+@container isobar (max-width: 640px) {
   #rail {
     top: 0;
     left: 0;
@@ -413,8 +413,8 @@ h2 { font-size: 21px; font-weight: 700; }
   .layer-status { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   #notice { top: 92px; width: calc(100% - 24px); text-align: center; }
   #map .leaflet-control-zoom { display: none; }
-  #map .leaflet-control-attribution { max-width: 100vw; font-size: 10px; }
-  #strip { max-height: 68vh; padding-right: 12px; padding-left: 12px; }
+  #map .leaflet-control-attribution { max-width: 100cqw; font-size: 10px; }
+  #strip { max-height: 68cqh; padding-right: 12px; padding-left: 12px; }
   .strip-title { display: block; }
   #strip-days { display: block; }
 }
@@ -559,14 +559,14 @@ h2 { font-size: 21px; font-weight: 700; }
 
 /* ---- Time ---- */
 #timeline {
-  position: fixed;
+  position: absolute;
   z-index: 950;
   bottom: calc(var(--strip-height) + 30px);
   left: 50%;
   display: flex;
   align-items: center;
   gap: 10px;
-  width: min(560px, calc(100vw - 340px));
+  width: min(560px, calc(100cqw - 340px));
   padding: 6px 12px;
   background: var(--night-glass);
   border-radius: 6px;
@@ -584,7 +584,7 @@ h2 { font-size: 21px; font-weight: 700; }
 #timeline input { flex: 1; min-width: 60px; accent-color: var(--lamp); }
 #timeline output { flex: none; min-width: 60px; font-size: 12px; white-space: nowrap; }
 #timeline .quiet-button { flex: none; }
-body.has-timeline #hint { bottom: calc(var(--strip-height) + 78px); }
+.isobar-root.has-timeline #hint { bottom: calc(var(--strip-height) + 78px); }
 
 /* ---- Readouts and map marks ---- */
 #readout { display: grid; gap: 1px; }
@@ -610,7 +610,7 @@ body.has-timeline #hint { bottom: calc(var(--strip-height) + 78px); }
 .cyclone-orange { border-color: #f7963b; }
 .cyclone-red { border-color: #e0342b; }
 #map .leaflet-popup-content-wrapper, #map .leaflet-popup-tip { background: var(--paper); color: var(--ink); border-radius: 3px; }
-#map .leaflet-popup-content { margin: 10px 12px; font: 13px/1.4 "B612", system-ui, sans-serif; color-scheme: light; }
+#map .leaflet-popup-content { margin: 10px 12px; font: 13px/1.4 "Isobar B612", system-ui, sans-serif; color-scheme: light; }
 #map .leaflet-popup-content p { margin: 3px 0 0; }
 .map-popup .text-button { display: block; margin-top: 6px; color: var(--ink); }
 .popup-row { display: flex; justify-content: space-between; gap: 14px; }
@@ -645,8 +645,8 @@ body.has-timeline #hint { bottom: calc(var(--strip-height) + 78px); }
 .compare-chart { margin: 4px 0; overflow-x: auto; }
 
 /* ---- Phones ---- */
-@media (max-width: 640px) {
-  #rail { max-height: 100dvh; }
+@container isobar (max-width: 640px) {
+  #rail { max-height: 100cqh; }
   .place-search { padding: 0 8px 4px; }
   #layers-toggle {
     display: block;
@@ -659,12 +659,12 @@ body.has-timeline #hint { bottom: calc(var(--strip-height) + 78px); }
     cursor: pointer;
   }
   #panel-body { display: none; }
-  body.layers-open #panel-body { display: block; max-height: calc(100dvh - 130px); overflow-y: auto; }
-  body.layers-open #layer-list { display: block; overflow: visible; padding: 0; }
-  body.layers-open .layer-toggle { width: 100%; max-width: none; }
-  body.layers-open .layer-toggle[aria-pressed="true"] .legend { display: block; }
-  body.layers-open .layer-status { white-space: normal; }
-  #timeline { width: calc(100vw - 16px); bottom: calc(var(--strip-height) + 24px); gap: 6px; padding: 5px 8px; }
+  .isobar-root.layers-open #panel-body { display: block; max-height: calc(100cqh - 130px); overflow-y: auto; }
+  .isobar-root.layers-open #layer-list { display: block; overflow: visible; padding: 0; }
+  .isobar-root.layers-open .layer-toggle { width: 100%; max-width: none; }
+  .isobar-root.layers-open .layer-toggle[aria-pressed="true"] .legend { display: block; }
+  .isobar-root.layers-open .layer-status { white-space: normal; }
+  #timeline { width: calc(100cqw - 16px); bottom: calc(var(--strip-height) + 24px); gap: 6px; padding: 5px 8px; }
   #timeline output { min-width: 44px; max-width: 110px; white-space: normal; font-size: 11px; line-height: 1.15; }
   .strip-head { flex-wrap: wrap; }
   .strip-tools { width: 100%; justify-content: space-between; }
@@ -678,9 +678,9 @@ body.has-timeline #hint { bottom: calc(var(--strip-height) + 78px); }
 .row-extra summary { cursor: pointer; }
 .row-extra summary:hover { color: var(--snow); }
 #readout { left: 312px; }
-body.has-timeline #readout { bottom: calc(var(--strip-height) + 78px); }
+.isobar-root.has-timeline #readout { bottom: calc(var(--strip-height) + 78px); }
 #fill-active {
-  position: fixed;
+  position: absolute;
   z-index: 1000;
   top: 12px;
   right: 12px;
@@ -691,9 +691,9 @@ body.has-timeline #readout { bottom: calc(var(--strip-height) + 78px); }
   border-radius: 6px;
   border-left: 3px solid var(--lamp);
 }
-@media (max-width: 640px) {
+@container isobar (max-width: 640px) {
   #readout { left: 12px; }
-  body.has-timeline #readout { bottom: calc(var(--strip-height) + var(--credit-height, 24px) + 46px); }
+  .isobar-root.has-timeline #readout { bottom: calc(var(--strip-height) + var(--credit-height, 24px) + 46px); }
   #timeline { bottom: calc(var(--strip-height) + var(--credit-height, 24px) + 4px); }
   #fill-active {
     top: auto;
@@ -704,10 +704,10 @@ body.has-timeline #readout { bottom: calc(var(--strip-height) + 78px); }
     padding: 6px 8px;
   }
   #fill-active .fill-about, #fill-active .opacity-control { display: none; }
-  body.layers-open #fill-active { display: none; }
-  body:not(.has-timeline) #fill-active { bottom: calc(var(--strip-height) + var(--credit-height, 24px) + 4px); }
+  .isobar-root.layers-open #fill-active { display: none; }
+  .isobar-root:not(.has-timeline) #fill-active { bottom: calc(var(--strip-height) + var(--credit-height, 24px) + 4px); }
   /* With a forecast open there's little map left, and it should stay visible. */
-  body.strip-open #fill-active, body.strip-open #timeline { display: none; }
+  .isobar-root.strip-open #fill-active, .isobar-root.strip-open #timeline { display: none; }
   .compare-table td { white-space: nowrap; }
   .compare-table td:last-child { white-space: nowrap; }
 }
@@ -720,7 +720,7 @@ body.has-timeline #readout { bottom: calc(var(--strip-height) + 78px); }
 
 /* ---- The 3D globe ---- */
 #globe {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: #060d1a;
   font: inherit;
@@ -758,14 +758,14 @@ body.has-timeline #readout { bottom: calc(var(--strip-height) + 78px); }
   line-height: 1.4;
   text-align: right;
 }
-#globe .maplibregl-ctrl-bottom-right .globe-credits { max-width: min(100vw, 640px); margin: 0; }
+#globe .maplibregl-ctrl-bottom-right .globe-credits { max-width: min(100cqw, 640px); margin: 0; }
 .globe-credits a { color: var(--snow); text-decoration: none; }
 .globe-credits a:hover { text-decoration: underline; }
 #globe .maplibregl-popup-content {
   padding: 10px 12px;
   background: var(--paper);
   color: var(--ink);
-  font: 13px/1.4 "B612", system-ui, sans-serif;
+  font: 13px/1.4 "Isobar B612", system-ui, sans-serif;
   color-scheme: light;
 }
 #globe .maplibregl-popup-content p { margin: 3px 0 0; }
@@ -776,7 +776,7 @@ body.has-timeline #readout { bottom: calc(var(--strip-height) + 78px); }
 #globe .maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--paper); }
 #globe .maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--paper); }
 #view-toggle {
-  position: fixed;
+  position: absolute;
   z-index: 1000;
   right: 10px;
   bottom: calc(var(--strip-height) + var(--credit-height, 24px) + 76px);
@@ -790,8 +790,14 @@ body.has-timeline #readout { bottom: calc(var(--strip-height) + 78px); }
 }
 #view-toggle:hover { border-color: var(--mist); }
 #view-toggle[disabled] { opacity: 0.6; cursor: progress; }
-@media (max-width: 640px) {
+@container isobar (max-width: 640px) {
   #globe .maplibregl-ctrl-group { display: none; }
-  #globe .maplibregl-ctrl-bottom-right .globe-credits { max-width: 100vw; font-size: 10px; text-align: left; }
+  #globe .maplibregl-ctrl-bottom-right .globe-credits { max-width: 100cqw; font-size: 10px; text-align: left; }
   #view-toggle { top: 12px; right: 8px; bottom: auto; padding: 5px 8px; font-size: 12px; }
 }
+
+/* A window-sized containing block; no page-wide CSS or fixed viewport geometry. */
+:host { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; }
+.isobar-root { position: relative; width: 100%; height: 100%; overflow: hidden; isolation: isolate; container: isobar / size; }
+[hidden] { display: none !important; }
+#about { position: absolute; z-index: 2100; inset: 16px; margin: auto; max-height: calc(100cqh - 32px); }

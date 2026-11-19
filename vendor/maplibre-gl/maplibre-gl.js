@@ -2,11 +2,9 @@
  * MapLibre GL JS
  * @license 3-Clause BSD. Full text of license: https://github.com/maplibre/maplibre-gl-js/blob/v5.24.0/LICENSE.txt
  */
-(function (global, factory) {
-typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-typeof define === 'function' && define.amd ? define(factory) :
-(global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.maplibregl = factory());
-})(this, (function () { 'use strict';
+
+// WebOS: module-local library export; bundled workers remain unchanged.
+const maplibregl = (function () { 'use strict';
 
 /* eslint-disable */
 
@@ -55,5 +53,5 @@ var maplibregl$1 = maplibregl;
 
 return maplibregl$1;
 
-}));
-//# sourceMappingURL=maplibre-gl.js.map
+})();
+export default maplibregl;

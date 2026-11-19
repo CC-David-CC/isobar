@@ -33,11 +33,12 @@ export function geocoderResults(results = []) {
 }
 
 export class PlaceSearch {
-  constructor({ input, list, onPick }) {
+  constructor({ input, list, onPick, root = input.getRootNode() }) {
     Object.assign(this, { input, list, onPick });
     this.saved = load('places', []);
     this.recent = load('recent', []);
     this.request = null;
+    this.events = new AbortController();
     if (!Array.isArray(this.saved)) this.saved = [];
     if (!Array.isArray(this.recent)) this.recent = [];
 
@@ -58,9 +59,16 @@ export class PlaceSearch {
         this.list.querySelector('button')?.focus();
       }
     });
-    document.addEventListener('click', (event) => {
-      if (!event.target.closest('.place-search')) this.close();
-    });
+    root.addEventListener('click', (event) => {
+      if (!event.composedPath().some((node) => node.classList?.contains('place-search'))) this.close();
+    }, { signal: this.events.signal });
+  }
+
+  dispose() {
+    clearTimeout(this.timer);
+    this.events.abort();
+    this.request?.abort();
+    this.request = null;
   }
 
   isSaved(place) {

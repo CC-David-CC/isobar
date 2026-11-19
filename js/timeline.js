@@ -21,8 +21,8 @@ export function describeOffset(hours) {
 }
 
 export class Timeline {
-  constructor(root, { onChange, isBusy }) {
-    Object.assign(this, { root, onChange, isBusy });
+  constructor(root, { onChange, isBusy, surface = root }) {
+    Object.assign(this, { root, onChange, isBusy, surface });
     this.steps = timelineSteps();
     this.index = 0;
     this.playing = null;
@@ -51,7 +51,7 @@ export class Timeline {
 
   setVisible(visible) {
     this.root.hidden = !visible;
-    document.body.classList.toggle('has-timeline', visible);
+    this.surface.classList.toggle('has-timeline', visible);
     if (!visible) this.stop();
   }
 
@@ -79,6 +79,11 @@ export class Timeline {
     clearInterval(this.playing);
     this.playing = null;
     this.playButton.textContent = 'Play';
+  }
+
+  dispose() {
+    this.stop();
+    clearTimeout(this.settle);
   }
 
   render() {

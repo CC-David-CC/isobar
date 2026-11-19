@@ -1,4 +1,6 @@
-# Isobar
+# Isobar — native WebOS app
+
+This copy adds a synchronous **`mount(host) → { element, dispose }`** entry at `app.mjs`. See [WEBOS.md](WEBOS.md) for integration, teardown and verification limits. The standalone page uses the same entry. The upstream project description follows.
 
 A free, open-source live weather map of the whole world. It has animated wind and ocean currents, radar, satellite views, cyclones, airports and hundreds of forecast and measurement layers: temperature, rain, soil moisture, evapotranspiration, air quality, waves and more. Click anywhere for a forecast.
 
