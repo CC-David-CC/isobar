@@ -30,7 +30,7 @@ import { WmsLayer } from './wms-layer.js';
 
 import { Lifetime } from './lifetime.js';
 
-export function startIsobar(root, surface, {placeKey}) {
+export function startIsobar(root, surface, {placeKey, defaultView}) {
 const STATUS_TICK_MS = 30_000;
 const DEFAULT_FILL_OPACITY = 0.72;
 const byId = (id) => root.getElementById(id);
@@ -42,7 +42,7 @@ try {
 const map = L.map(byId('map'), { zoomControl: false, minZoom: 2, maxZoom: 11, worldCopyJump: true });
 map.isobarSignal = lifetime.signal;
 lifetime.add(() => map.remove());
-const opening = openingView(Intl.DateTimeFormat().resolvedOptions().timeZone, -new Date().getTimezoneOffset());
+const opening = defaultView ?? openingView(Intl.DateTimeFormat().resolvedOptions().timeZone, -new Date().getTimezoneOffset());
 if (opening.bounds) map.fitBounds(opening.bounds, { animate: false });
 else map.setView(opening.center, opening.zoom, { animate: false });
 map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');

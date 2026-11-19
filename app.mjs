@@ -45,11 +45,17 @@ export function mount(host) {
   element.setAttribute('aria-label', 'Weather Maps');
   element.setAttribute('aria-busy', 'true');
   element.dataset.state = 'loading';
-  Object.assign(element.style, { display: 'block', position: 'relative', flex: '1 1 auto', alignSelf: 'stretch', padding: '0', width: '100%', height: domHost ? '100%' : 'auto', minWidth: '0', minHeight: '0', overflow: 'hidden' });
+  Object.assign(element.style, { display: 'block', position: 'relative', flex: '1 1 auto', alignSelf: 'stretch', padding: '0', width: '100%', minWidth: '0', minHeight: '0', overflow: 'hidden' });
+  // The desktop's .window-content rule supplies the height below its window caption.
+  if (domHost) element.style.height = '100%';
   const root = element.attachShadow({ mode: 'open' });
   const surface = document.createElement('div');
   surface.className = 'isobar-root';
-  surface.innerHTML = markup;
+  const loading = document.createElement('p');
+  loading.setAttribute('role', 'status');
+  loading.style.padding = '12px';
+  loading.textContent = 'Loading Weather Maps…';
+  surface.append(loading);
   root.append(surface);
   if (domHost) host.appendChild(element);
   const lifetime = new AbortController();
@@ -63,7 +69,8 @@ export function mount(host) {
       if (disposed) return;
       const subject = !domHost && host.storage?.signedInSubject?.();
       const placeKey = domHost ? 'places.standalone' : subject ? 'places.account.' + encodeURIComponent(subject) : null;
-      stop = startIsobar(root, surface, {placeKey});
+      surface.innerHTML = markup;
+      stop = startIsobar(root, surface, { placeKey, defaultView: !domHost ? { center: [33.749, -84.38798], zoom: 6, radar: 'radar' } : null });
       element.dataset.state = 'ready';
       element.removeAttribute('aria-busy');
     }).catch((error) => {
@@ -72,6 +79,7 @@ export function mount(host) {
       element.removeAttribute('aria-busy');
       const message = document.createElement('p');
       message.setAttribute('role', 'alert');
+      message.style.padding = '12px';
       message.textContent = `Isobar could not start: ${error.message}`;
       surface.replaceChildren(message);
       console.error('Isobar startup failed', error);
